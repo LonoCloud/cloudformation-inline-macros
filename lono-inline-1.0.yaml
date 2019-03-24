@@ -1,0 +1,326 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+#
+# This template defines the InlineJS and InlinePy cloudformation
+# macros that allows macro and function definitions to be declared and
+# used inline in the same cloudformation template.
+#
+# To use these macros in a template, ...
+#
+# The function wrapper has the same top-level parameters as a Lambda
+# function handler (event, context). The event parameters has the
+# following structure:
+#
+#   {
+#     region: ...,                  // region where macro resides
+#     accountId: ...,               // invoking account ID
+#     fragment: ...,                // sibling template fragment (JSON)
+#     transformId: ...,             // name of macro
+#     params: ...,                  // specified parameters
+#     requestId: ...,               // ID of request
+#     templateParameterValues: ..., //
+#   }
+
+Resources:
+  MacroExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Action: ['sts:AssumeRole']
+          Effect: Allow
+          Principal:
+            Service: [lambda.amazonaws.com, cloudformation.amazonaws.com]
+
+  MacroLogPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "LogPolicy-Lono-Inline"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: ['logs:*']
+            Resource: 'arn:aws:logs:*:*:*'
+      Roles:
+        - !Ref MacroExecutionRole
+
+  InlineJSFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs8.10
+      Role: !GetAtt MacroExecutionRole.Arn
+      Code:
+        ZipFile: |
+          // Call f on every element of obj. Operates in either depth
+          // first order (bf == false) or breadth first (bf == true).
+          // The arguments to f depend on the element type:
+          // - array element: f(val, idx, arr)
+          // - object key:    f(key)
+          // - object value:  f(val, key, keyIdx, keyList)
+          function walk(f, obj, bf=false) {
+            let x
+            if (!obj || typeof(obj) !== 'object') { return obj }
+            return bf
+              ? Array.isArray(obj)
+                ? obj.map((v, i, arr) => f(v, i, arr))
+                   .map((v) => walk(f, v, bf))
+                : Object.keys(obj)
+                    .map((k) => f(k))
+                    .map((k, i, arr) => [k, f(obj[k], k, i, arr)])
+                    .reduce((a, [k, v]) => (a[k] = walk(f, v, bf), a), {})
+              : Array.isArray(obj)
+                ? obj.map((v, i, arr) => f(walk(f, v, bf), i, arr))
+                : Object.keys(obj).reduce((a, k, i, arr) =>
+                    (x = f(walk(f, obj[k], bf), k, i, arr), a[f(k)] = x, a), {})
+          }
+
+          // Merge two maps using the result of f(v1, v2) for any keys
+          // that occur in both maps
+          function mergeWith(f, a, b) {
+            return Object.entries(b).reduce((m, [k, v]) =>
+                (m[k] = k in m ? f(m[k], v) : v, m), Object.assign({}, a))
+          }
+          // Deep merge two maps
+          function deepMerge(a, b) {
+            return (a && a.constructor === Object) ? mergeWith(deepMerge, a, b) : b
+          }
+
+
+          // If obj contains 'Fn::Macro', invoke the macros using
+          // the current fragment and substitute resulting fragment
+          // Fn::Macro can contain one call (map) or multiple (list)
+          function doMacro(event, context, obj) {
+            if (obj && typeof(obj) === 'object' && 'Fn::Macro' in obj) {
+              const {['Fn::Macro']: mc, ...res} = obj // split out calls
+              return (Array.isArray(mc) ? mc : [mc])
+                .reduce((res, call) =>
+                  global[call.Name](Object.assign({}, event, {
+                    params: call.Parameters || {},
+                    fragment: res
+                  }), context),
+                  res)
+            }
+            return obj
+          }
+
+          // If obj contains 'Fn::Function', call the first argument
+          // as a global function using the remaining arguments.
+          function doFunction(obj) {
+            if (obj && typeof(obj) === 'object' && 'Fn::Function' in obj) {
+              const [fname, ...fargs] = obj['Fn::Function']
+              return global[fname](...fargs)
+            }
+            return obj
+          }
+
+          exports.handler = function(event, context, callback) {
+            console.log( 'event:', JSON.stringify(event))
+            try {
+              let frag = event.fragment
+              if (!('AWSTemplateFormatVersion' in frag)) {
+                throw new Error('no AWSTemplateFormatVersion in template')
+              }
+              const preEvalDef = frag.Metadata && frag.Metadata.JSEval
+              const macroDefs = frag.Metadata && frag.Metadata.JSMacros
+
+              // Expose utility functions in global scope
+              Object.assign(global, {walk, mergeWith, deepMerge})
+
+              // Eval any PreEval code
+              if (preEvalDef) {
+                // Magic to cause eval to evaluate in global scope
+                // http://perfectionkills.com/global-eval-what-are-the-options/
+                (1, eval)(preEvalDef)
+              }
+
+              // Instantiate macros into global handler functions
+              if (macroDefs) {
+                Object.entries(macroDefs).forEach(([k, v]) =>
+                    global[k] = new Function( 'event', 'context', v))
+              }
+
+              // Do breadth first macro invocation (i.e. start with
+              // the top-level macros and work down the tree). This is
+              // unlike how standard CloudFormation macros work which
+              // is depth first, but it is more similar to Lisp
+              // macros.
+              frag = walk(doMacro.bind(null, event, context),
+                      [frag], true)[0]
+
+              // Do depth first invocation of functions
+              frag = walk(doFunction, [frag], false)[0]
+
+              // Return expected response object with new fragment
+              console.log( 'callback fragment:', JSON.stringify(frag))
+              callback(null, { requestId:  event.requestId,
+                               status:     'success',
+                               fragment:   frag })
+            } catch (e) {
+              console.error( 'caught error:', e)
+              callback(e)
+            }
+          }
+
+  InlinePyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Runtime: python3.7
+      Role: !GetAtt MacroExecutionRole.Arn
+      Code:
+        ZipFile: |
+          import sys, os, re, json, traceback
+
+          # Call f on every element of obj. Operates in either depth
+          # first order (bf == false) or breadth first (bf == true).
+          # The arguments to f depend on the element type:
+          # - array element: f(val, idx, arr)
+          # - object key:    f(key)
+          # - object value:  f(val, key, keyIdx, keyList)
+          def walk(f, obj, bf=False):
+              if not (isinstance(obj, dict) or isinstance(obj, list)): return obj
+              if bf: # breadth first walk
+                  if isinstance(obj, list):
+                      newList = [f(v, i, obj) for [i, v] in enumerate(obj)]
+                      return [walk(f, v, bf) for v in newList]
+                  elif isinstance(obj, dict):
+                      keyArr = [f(k) for k in sorted(obj.keys())]
+                      kvs = [(k, f(obj[k], k, i, keyArr)) for [i, k] in enumerate(keyArr)]
+                      return {k:walk(f, v, bf) for [k, v] in kvs}
+              else: # depth first walk
+                  if isinstance(obj, list):
+                      return [f(walk(f, v, bf), i, obj) for [i, v] in enumerate(obj)]
+                  elif isinstance(obj, dict):
+                      keyArr = sorted(obj.keys())
+                      newMap = {}
+                      for [i, k] in enumerate(keyArr):
+                          x = f(walk(f, obj[k], bf), k, i, keyArr)
+                          newMap[f(k)] = x
+                      return newMap
+
+          # If obj contains 'Fn::Macro', invoke the macros using
+          # the current fragment and substitute resulting fragment
+          # Fn::Macro can contain one call (map) or multiple (list)
+          def doMacro(event, context, obj):
+              if isinstance(obj, dict) and obj.get('Fn::Macro'):
+                  mc = obj['Fn::Macro']
+                  del obj['Fn::Macro']
+                  res = obj
+                  if isinstance(mc, dict): mc = [mc]
+                  for call in mc:
+                      evt = event.copy()
+                      evt.update({
+                          'params': call.get('Parameters', {}),
+                          'fragment': res })
+                      res = globals()[call['Name']](evt, context)
+                  return res
+              else:
+                  return obj
+
+          # If obj contains 'Fn::Function', call the first argument
+          # as a global function using the remaining arguments.
+          def doFunction(obj, *a):
+              if isinstance(obj, dict) and obj.get('Fn::Function'):
+                  fname, *fargs = obj['Fn::Function']
+                  return globals()[fname](*fargs)
+              return obj
+
+          def handler(event, context):
+              print( 'event:', json.dumps(event))
+              resp = {'requestId': event['requestId'],
+                      'status'   : 'success' }
+              try:
+                  frag = event['fragment']
+                  if not 'AWSTemplateFormatVersion' in frag:
+                      raise 'no AWSTemplateFormatVersion in template' 
+                  preEvalDef = frag.get('Metadata', {}).get('PyEval', None)
+                  macroDefs = frag.get('Metadata', {}).get('PyMacros', None)
+
+                  # Expose utility functions in global scope
+                  # TODO
+                  
+                  # Eval any PreEval code
+                  if preEvalDef:
+                    # locals defaults to globals if globals is set so
+                    # everything is evaluted/defined in global context
+                    exec(compile(preEvalDef, '', 'exec'), globals())
+
+                  # Instantiate macros into global handler functions
+                  if macroDefs:
+                      for [k, v] in macroDefs.items():
+                        code = "def %s(event, context):\n" % k
+                        code += re.sub(r'^', '    ', v, flags=re.MULTILINE)
+                        exec(compile(code, '', 'exec'))
+                        globals()[k] = locals()[k]
+
+                  # Do breadth first macro invocation (i.e. start with
+                  # the top-level macros and work down the tree). This
+                  # is unlike how standard CloudFormation macros work
+                  # which is depth first, but it is more similar to
+                  # Lisp macros.
+                  frag = walk(lambda obj, *a, **kw: doMacro(event, context, obj),
+                          [frag], True)[0]
+
+                  # Do depth first invocation of functions
+                  frag = walk(doFunction, [frag], False)[0]
+
+                  # Return expected response object with new fragment
+                  print('callback fragment:', json.dumps(frag))
+                  resp['fragment'] = frag
+
+              except Exception as e:
+                  traceback.print_exc()
+                  #print('caught error:', e)
+                  resp['status'] = 'failure'
+                  resp['errorMessage'] = str(e)
+              return resp
+
+  InlineJSMacro:
+    Type: AWS::CloudFormation::Macro
+    Properties:
+      Name: !Sub 'InlineJS-1_0'
+      Description: !Sub 'Macro definition of InlineJS-1_0'
+      FunctionName: !GetAtt InlineJSFunction.Arn
+
+  InlinePyMacro:
+    Type: AWS::CloudFormation::Macro
+    Properties:
+      Name: !Sub 'InlinePy-1_0'
+      Description: !Sub 'Macro definition of InlinePy-1_0'
+      FunctionName: !GetAtt InlinePyFunction.Arn
+
+  InlineJSFunctionPermissions:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt InlineJSFunction.Arn
+      Principal: 'cloudformation.amazonaws.com'
+
+  InlinePyFunctionPermissions:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt InlinePyFunction.Arn
+      Principal: 'cloudformation.amazonaws.com'
+
+Outputs:
+  InlineJSFunction:
+    Value: !Ref InlineJSFunction
+
+  InlinePyFunction:
+    Value: !Ref InlinePyFunction
+
+  InlineJSMacro:
+    Value: !Ref InlineJSMacro
+
+  InlinePyMacro:
+    Value: !Ref InlinePyMacro
+
+  MacroExecutionRole:
+    Value: !Ref MacroExecutionRole
+
+  MacroLogPolicy:
+    Value: !Ref MacroLogPolicy

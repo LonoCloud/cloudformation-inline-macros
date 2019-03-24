@@ -1,0 +1,8 @@
+{
+    "name": "lono-macros",
+    "version": "1.0",
+    "description": "LonoCloud Cloudformation Macros",
+    "dependencies": {
+        "yaml-cfn": "0.2.0"
+    }
+}

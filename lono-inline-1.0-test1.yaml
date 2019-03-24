@@ -1,0 +1,54 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: test InlineJS/InlinePy part 1
+Transform: [InlineJS-1_0]
+#Transform: [InlinePy-1_0]
+
+Metadata:
+  #InlineJSRequire: ['deepMerge', 'walk']
+  JSMacros:
+    AddFooOutput: |
+        return deepMerge(event.fragment,
+          {Outputs: {FooOutput: {Value: "FooOutputValue"}}})
+    AddParam1: |
+        const {fragment, params: {param1}} = event
+        return `<JS orig: '${JSON.stringify(fragment)}', param1: '${param1}'>`
+    AddParam2: |
+        const {fragment, params: {param2}} = event
+        return `<JS orig: '${JSON.stringify(fragment)}', param2: '${param2}'>`
+
+  PyMacros:
+    AddFooOutput: |
+        event['fragment']['Outputs']['FooOutput'] = {'Value': 'FooOutputValue'}
+        return event['fragment']
+    AddParam1: |
+        return "<Py orig: '%s', param1: '%s'>" % (
+            json.dumps(event['fragment']), event['params']['param1'])
+    AddParam2: |
+        return "<Py orig: '%s', param2: '%s'>" % (
+            json.dumps(event['fragment']), event['params']['param2'])
+
+'Fn::Macro':
+  - Name: AddFooOutput
+
+Resources:
+
+  SSMData:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: !Sub
+        - |
+          VAR1: ${VAR1}
+        -
+          VAR1:
+            'Fn::Macro':
+              - Name: AddParam1
+                Parameters:
+                  param1: "pval1"
+              - Name: AddParam2
+                Parameters:
+                  param2: "pval2"
+
+Outputs:
+  SSMData:
+    Value: !Sub "${SSMData.Value}"

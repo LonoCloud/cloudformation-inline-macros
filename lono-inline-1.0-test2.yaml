@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: test lono-macros part 2
+Transform: [InlineJS-1_0]
+#Transform: [InlinePy-1_0]
+
+Metadata:
+  JSMacros:
+    Loop: |
+        const {Start = 0, End, Fragments} = event.params
+        for (let i = Start; i <= End; i++) {
+          Object.assign(event.fragment,  walk((v, k) => {
+            return typeof v === 'string' ? v.replace(/%/, i.toString()) : v
+          }, Fragments))
+        }
+        return event.fragment
+
+  PyMacros:
+    Loop: |
+        params = event['params']
+        [Start, End] = params.get('Start', 0), params['End']
+        def replacer(i, v):
+            if type(v) == str: return re.sub(r"%", str(i), v, flags=re.MULTILINE)
+            else: return v
+        for i in range(Start, End+1):
+            r = walk(lambda v, *a: replacer(i, v), params['Fragments'])
+            event['fragment'].update(r)
+        return event['fragment']
+
+
+Resources:
+
+  'Fn::Macro':
+    Name: Loop
+    Parameters:
+      Start: 1
+      End: 3
+      Fragments:
+        SSMDataA%:
+          Type: 'AWS::SSM::Parameter'
+          Properties:
+            Type: String
+            Value: value for instance A%
+        SSMDataB%:
+          Type: 'AWS::SSM::Parameter'
+          Properties:
+            Type: String
+            Value: value for instance B%
+
+  SSMDataWithLoop:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: !Sub
+        - |
+          ${VAR1}${VAR2}
+        -
+          'Fn::Macro':
+            Name: Loop
+            Parameters:
+              Start: 1
+              End: 2
+              Fragments:
+                VAR%: value for VAR%
+
+Outputs:
+  'Fn::Macro':
+    Name: Loop
+    Parameters:
+      Start: 1
+      End: 3
+      Fragments:
+        SSMDataA%:
+          Value: !Sub "${SSMDataA%.Value}"
+        SSMDataB%:
+          Value: !Sub "${SSMDataB%.Value}"
+
+  SSMDataWithLoop:
+    Value: !Sub "${SSMDataWithLoop.Value}"

@@ -1,0 +1,30 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: test lono-macros part 3
+Transform: [InlineJS-1_0]
+#Transform: [InlinePy-1_0]
+
+Metadata:
+  JSEval: |
+      function Add(a, b) { return a + b }
+      function Mult(a, b) { return a * b }
+
+  PyEval: |
+      def Add(a, b): return a + b
+      def Mult(a, b): return a * b
+
+Resources:
+  SSMData:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value:  { 'Fn::Function': [Add, 2, 3] }
+
+Outputs:
+  SSMData:
+    Value: !Sub '${SSMData.Value}'
+
+  Output1:
+    Value: { 'Fn::Function':  [Mult, 3, 4] }
+
+  Output2:
+    Value: { 'Fn::Function': [Add, 5, { 'Fn::Function': [Mult, 6, 7] } ] }
