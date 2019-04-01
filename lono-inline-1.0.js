@@ -119,8 +119,32 @@
 
 const assert = require('assert')
 const { readFileSync } = require('fs')
-const { yamlParse, yamlDump } = require('yaml-cfn')
+const { schema } = require('yaml-cfn')
+const jsYaml = require('js-yaml')
 const mode = process.argv[2]
+
+/////////////////////////////////
+// Add yaml types
+
+let yamlTypeMacroMap = new jsYaml.Type('!Macro', {
+    kind: 'mapping',
+    construct: (data) => ({'Fn::Macro': data})
+})
+let yamlTypeMacroSeq = new jsYaml.Type('!Macro', {
+    kind: 'sequence',
+    construct: (data) => ({'Fn::Macro': data})
+})
+let yamlTypeFuncSeq = new jsYaml.Type('!Function', {
+    kind: 'sequence',
+    construct: (data) => ({'Fn::Function': data})
+})
+const inlineSchema = new jsYaml.Schema({
+    include:  [schema],
+    implicit: [],
+    explicit: [yamlTypeMacroMap, yamlTypeMacroSeq, yamlTypeFuncSeq],
+})
+
+/////////////////////////////////
 
 function die(code, ...args) { console.error(...args); process.exit(code) }
 
@@ -134,7 +158,8 @@ function load(tPath, callback) {
       templateParameterValues: {}
     }
 
-    const fragment = yamlParse(readFileSync(tPath, 'utf8'))
+    const fragment = jsYaml.safeLoad(readFileSync(tPath, 'utf8'),
+            {schema: inlineSchema})
     let tParams = {}
     for (const [k, v] of Object.entries(fragment.Parameters || {})) {
       const val = process.env[k] || v.Default
@@ -168,7 +193,8 @@ function loadTest(tPath, cPath) {
       console.warn("FAILURE")
       process.exit(1)
     }
-    let expected = yamlParse(readFileSync(cPath, 'utf8'))
+    let expected = jsYaml.safeLoad(readFileSync(cPath, 'utf8'),
+            {schema: inlineSchema})
     let respFragment = Object.assign({}, resp.fragment)
     // Remove stuff we don't want to check/show
     delete respFragment.Metadata
@@ -192,11 +218,13 @@ function loadTest(tPath, cPath) {
 }
 
 
+
 let res, log, frag, m1, m2
 switch (mode) {
   case 'load':
     load(process.argv[3], function(err, resp) {
-        console.warn(yamlDump(resp.fragment))
+        console.warn(jsYaml.safeDump(resp.fragment,
+                    {schema: inlineSchema}))
         //console.warn(JSON.stringify(resp, null, 2))
     })
     break
