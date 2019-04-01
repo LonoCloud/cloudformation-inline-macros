@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: test lono-inline part 3
+Transform: [InlineJS-1_0]
+Resources:
+  SSMData:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: 5
+Outputs:
+  SSMData:
+    Value: !Sub '${SSMData.Value}'
+  Output1:
+    Value: 12
+  Output2:
+    Value: 47
+

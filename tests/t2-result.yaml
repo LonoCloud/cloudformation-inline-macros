@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: test lono-macros part 2
+Transform: [InlineJS-1_0]
+Resources:
+  SSMDataWithLoop:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: !Sub
+        - |
+          ${VAR1}${VAR2}
+        - VAR1: value for VAR1
+          VAR2: value for VAR2
+  SSMDataA1:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: value for instance A1
+  SSMDataB1:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: value for instance B1
+  SSMDataA2:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: value for instance A2
+  SSMDataB2:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: value for instance B2
+  SSMDataA3:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: value for instance A3
+  SSMDataB3:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: value for instance B3
+Outputs:
+  SSMDataWithLoop:
+    Value: !Sub '${SSMDataWithLoop.Value}'
+  SSMDataA1:
+    Value: !Sub '${SSMDataA1.Value}'
+  SSMDataB1:
+    Value: !Sub '${SSMDataB1.Value}'
+  SSMDataA2:
+    Value: !Sub '${SSMDataA2.Value}'
+  SSMDataB2:
+    Value: !Sub '${SSMDataB2.Value}'
+  SSMDataA3:
+    Value: !Sub '${SSMDataA3.Value}'
+  SSMDataB3:
+    Value: !Sub '${SSMDataB3.Value}'
+

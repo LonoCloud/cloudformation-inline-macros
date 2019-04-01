@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: test lono-inline part 4
+Transform: [InlineJS-1_0]
+#Transform: [InlinePy-1_0]
+
+Parameters:
+  PList:
+    Type: CommaDelimitedList
+    Default: "abc, def"
+
+  EmptyList:
+    Type: CommaDelimitedList
+    Default: ""
+
+Metadata:
+  JSMacros:
+    TemplateWith: |
+        const {fragment, params: {Param, JSEval, Fragments}} = event
+        if (!(Param || JSEval)) { throw new Error('TemplateWith requires JSEval or Param') }
+        const pVal = JSEval ? eval(JSEval) : event.templateParameterValues[Param]
+        const lst = Array.isArray(pVal) ? pVal : [pVal]
+        let res = Array.isArray(Fragments) ? [] : fragment
+        for (let [i, o] of lst.entries()) {
+          const r = walk((v, k) => {
+            return typeof v === 'string'
+              ? v.replace(/\${i}/, i.toString()).replace(/\${v}/, o)
+              : v}, Fragments)
+          if (Array.isArray(res)) { res.push(...r) }
+          else { Object.assign(res, r) }
+        }
+        return res
+
+  PyEval: |
+      import random
+
+  PyMacros:
+    TemplateWith: |
+        params = event['params']
+        if 'PyEval' in params: pVal = eval(params['PyEval'])
+        elif 'Param' in params: pVal = event['templateParameterValues'][params['Param']]
+        else: raise Exception('TemplateWith requires PyEval or Param')
+        if isinstance(pVal, (list, tuple)): lst = pVal
+        else: lst = [pVal]
+        res = event['fragment']
+        if isinstance(params['Fragments'], list): res = []
+        def replacer(i, v, o):
+            if type(v) == str:
+                tmp = re.sub(r"\${i}", str(i), v, flags=re.MULTILINE)
+                return re.sub(r"\${v}", str(o), tmp, flags=re.MULTILINE)
+            else: return v
+        for [i, o] in enumerate(lst):
+            r = walk(lambda v, *a: replacer(i, v, o), params['Fragments'])
+            if isinstance(res, list): res.extend(r)
+            else: res.update(r)
+        return res
+
+
+Resources:
+
+  'Fn::Macro':
+    - Name: TemplateWith
+      Parameters:
+        Param: PList
+        Fragments:
+          SSMDataA${i}:
+            Type: 'AWS::SSM::Parameter'
+            Properties:
+              Type: String
+              Value: "value for instance A${i}: ${v}"
+          SSMDataB${i}:
+            Type: 'AWS::SSM::Parameter'
+            Properties:
+              Type: String
+              Value: "value for instance B${i}: ${v}"
+    - Name: TemplateWith
+      Parameters:
+        Param: EmptyList
+        Fragments:
+          SSMDataC${i}:
+            Type: 'AWS::SSM::Parameter'
+            Properties:
+              Type: String
+              Value: "This one should be deleted"
+
+  IPSet:
+    Type: "AWS::WAFRegional::IPSet"
+    Properties:
+      Name: !Sub "${AWS::StackName}-IPSet"
+      IPSetDescriptors:
+        'Fn::Macro':
+          Name: TemplateWith
+          Parameters:
+            Param: PList
+            Fragments:
+              - Type: IPV4
+                Value: "${v}"
+Outputs:
+  'Fn::Macro':
+    - Name: TemplateWith
+      Parameters:
+        JSEval: "event['templateParameterValues']['PList']"
+        PyEval: "event['templateParameterValues']['PList']"
+        Fragments:
+          SSMDataA${i}:
+            Value: !Sub "${SSMDataA${i}.Value} should be ${v}"
+          SSMDataB${i}:
+            Value: !Sub "${SSMDataB${i}.Value} should be ${v}"
+    - Name: TemplateWith
+      Parameters:
+        JSEval: "parseInt(Math.random()*100000)"
+        PyEval: "random.randint(0, 100000)"
+        Fragments:
+          Random${i}:
+            Value: "Ignore: ${v}"

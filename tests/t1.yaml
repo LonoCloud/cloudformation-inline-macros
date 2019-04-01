@@ -11,20 +11,20 @@ Metadata:
           {Outputs: {FooOutput: {Value: "FooOutputValue"}}})
     AddParam1: |
         const {fragment, params: {param1}} = event
-        return `<JS orig: '${JSON.stringify(fragment)}', param1: '${param1}'>`
+        return `<orig: '${JSON.stringify(fragment)}', param1: '${param1}'>`
     AddParam2: |
         const {fragment, params: {param2}} = event
-        return `<JS orig: '${JSON.stringify(fragment)}', param2: '${param2}'>`
+        return `<orig: '${JSON.stringify(fragment)}', param2: '${param2}'>`
 
   PyMacros:
     AddFooOutput: |
         event['fragment']['Outputs']['FooOutput'] = {'Value': 'FooOutputValue'}
         return event['fragment']
     AddParam1: |
-        return "<Py orig: '%s', param1: '%s'>" % (
+        return "<orig: '%s', param1: '%s'>" % (
             json.dumps(event['fragment']), event['params']['param1'])
     AddParam2: |
-        return "<Py orig: '%s', param2: '%s'>" % (
+        return "<orig: '%s', param2: '%s'>" % (
             json.dumps(event['fragment']), event['params']['param2'])
 
 'Fn::Macro':

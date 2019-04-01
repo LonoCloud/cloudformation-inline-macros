@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: test lono-macros part 3
+Description: test lono-inline part 3
 Transform: [InlineJS-1_0]
 #Transform: [InlinePy-1_0]
 

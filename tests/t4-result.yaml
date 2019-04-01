@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: test lono-inline part 4
+Transform: [InlineJS-1_0]
+Parameters:
+  PList:
+    Type: CommaDelimitedList
+    Default: 'abc, def'
+  EmptyList:
+    Type: CommaDelimitedList
+    Default: ''
+Resources:
+  IPSet:
+    Type: 'AWS::WAFRegional::IPSet'
+    Properties:
+      Name: !Sub '${AWS::StackName}-IPSet'
+      IPSetDescriptors:
+        - Type: IPV4
+          Value: abc
+        - Type: IPV4
+          Value: def
+  SSMDataA0:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: 'value for instance A0: abc'
+  SSMDataB0:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: 'value for instance B0: abc'
+  SSMDataA1:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: 'value for instance A1: def'
+  SSMDataB1:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: 'value for instance B1: def'
+Outputs:
+  SSMDataA0:
+    Value: !Sub '${SSMDataA0.Value} should be abc'
+  SSMDataB0:
+    Value: !Sub '${SSMDataB0.Value} should be abc'
+  SSMDataA1:
+    Value: !Sub '${SSMDataA1.Value} should be def'
+  SSMDataB1:
+    Value: !Sub '${SSMDataB1.Value} should be def'
+  Random0:
+    Value: 'IGNORED'
+
