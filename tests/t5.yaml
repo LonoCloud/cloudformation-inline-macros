@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "InlineJS/InlinePy test 5: recursive eval"
+Transform: [InlineJS-1_0]
+#Transform: [InlinePy-1_0]
+
+Metadata:
+  JSMacros:
+    Fail: |
+        throw new Error("Invalid invoke of Fail, event.fragment:", event.fragment)
+    Omit: |
+        return event.fragment
+    Literal: |
+        return Object.assign({}, event.fragment, event.params.Fragment)
+    # Expand to macro
+    MacroExpand1: |
+        return Object.assign({}, event.fragment, {
+            "Fn::Macro": {
+              "Name": "Literal",
+              "Parameters": {
+                "Fragment": {
+                  "SSMData2": {
+                    "Type": "AWS::SSM::Parameter",
+                    "Properties": {
+                      "Type": "String",
+                      "Value": "value for SSMData2 resource" } } } } } })
+
+    # Expand to fragment containing new macro
+    MacroExpand2: |
+        return Object.assign({}, event.fragment, {
+            "SSMData3": {
+              "Fn::Macro": {
+                "Name": "Literal",
+                "Parameters": {
+                  "Fragment": {
+                    "Type": "AWS::SSM::Parameter",
+                    "Properties": {
+                      "Type": "String",
+                      "Value": "value for SSMData3 resource" } } } } } })
+
+
+  PyMacros:
+    Fail: |
+        raise Exception("Invalid invoke of Fail, event['fragment']:", event['fragment'])
+    Omit: |
+        return event['fragment']
+    Literal: |
+        frag = event['fragment'].copy()
+        frag.update(event['params']['Fragment'])
+        return frag
+    MacroExpand1: |
+        frag = event['fragment'].copy()
+        frag.update({
+            "Fn::Macro": {
+              "Name": "Literal",
+              "Parameters": {
+                "Fragment": {
+                  "SSMData2": {
+                    "Type": "AWS::SSM::Parameter",
+                    "Properties": {
+                      "Type": "String",
+                      "Value": "value for SSMData2 resource" } } } } } })
+        return frag
+    MacroExpand2: |
+        frag = event['fragment'].copy()
+        frag.update({
+            "SSMData3": {
+              "Fn::Macro": {
+                "Name": "Literal",
+                "Parameters": {
+                  "Fragment": {
+                    "Type": "AWS::SSM::Parameter",
+                    "Properties": {
+                      "Type": "String",
+                      "Value": "value for SSMData3 resource" } } } } } })
+        return frag
+
+
+Resources:
+
+  'Fn::Macro':
+    - Name: Literal
+      Parameters:
+        Fragment:
+          SSMData1:
+            Type: 'AWS::SSM::Parameter'
+            Properties:
+              'Fn::Macro':
+                - Name: Literal
+                  Parameters:
+                    Fragment:
+                      Type: String
+                      Value: value for SSMData1 resource
+
+    - Name: Omit
+      Parameters:
+        Fragment:
+          Data0:
+            'Fn::Macro':
+              Name: Fail
+
+    # Expand to macro
+    - Name: MacroExpand1
+
+    # Expand to fragment containing new macro
+    - Name: MacroExpand2
+
+Outputs:
+  SSMData1:
+    Value: !Sub "${SSMData1.Value}"
+  SSMData2:
+    Value: !Sub "${SSMData2.Value}"
+  SSMData3:
+    Value: !Sub "${SSMData3.Value}"

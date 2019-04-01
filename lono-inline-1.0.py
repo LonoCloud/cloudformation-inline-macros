@@ -18,6 +18,8 @@ def definitions():
           # - array element: f(val, idx, arr)
           # - object key:    f(key)
           # - object value:  f(val, key, keyIdx, keyList)
+          #
+          # Can used for a deep copy: walk(lambda v, *a: v, obj)
           def walk(f, obj, bf=False):
               if not (isinstance(obj, dict) or isinstance(obj, list)): return obj
               if bf: # breadth first walk
@@ -58,10 +60,10 @@ def definitions():
           # the current fragment and substitute resulting fragment
           # Fn::Macro can contain one call (map) or multiple (list)
           def doMacro(event, context, obj):
-              if isinstance(obj, dict) and obj.get('Fn::Macro'):
+              while isinstance(obj, dict) and obj.get('Fn::Macro'):
                   mc = obj['Fn::Macro']
-                  del obj['Fn::Macro']
-                  res = obj
+                  res = walk(lambda v, *a: v, obj) # deep copy
+                  del res['Fn::Macro']
                   if isinstance(mc, dict): mc = [mc]
                   for call in mc:
                       evt = event.copy()
@@ -69,9 +71,8 @@ def definitions():
                           'params': call.get('Parameters', {}),
                           'fragment': res })
                       res = globals()[call['Name']](evt, context)
-                  return res
-              else:
-                  return obj
+                  obj = res
+              return obj
 
           # If obj contains 'Fn::Function', call the first argument
           # as a global function using the remaining arguments.
@@ -198,7 +199,7 @@ def loadTest(tPath, cPath):
     warn('SUCCESS')
 
 if mode == 'load':
-    print(to_yaml(json.dumps(load(sys.argv[2])['fragment'])))
+    warn(to_yaml(json.dumps(load(sys.argv[2])['fragment'])))
 elif mode == 'compare':
     loadTest(sys.argv[2], sys.argv[3])
 elif mode == 'test':
@@ -275,7 +276,8 @@ elif mode == 'test':
     tests = [['tests/t1.yaml', 'tests/t1-result.yaml'],
              ['tests/t2.yaml', 'tests/t2-result.yaml'],
              ['tests/t3.yaml', 'tests/t3-result.yaml'],
-             ['tests/t4.yaml', 'tests/t4-result.yaml']]
+             ['tests/t4.yaml', 'tests/t4-result.yaml'],
+             ['tests/t5.yaml', 'tests/t5-result.yaml']]
     for [tPath, cPath] in tests:
         loadTest(tPath, cPath)
 else:

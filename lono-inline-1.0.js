@@ -9,6 +9,8 @@
           // - array element: f(val, idx, arr)
           // - object key:    f(key)
           // - object value:  f(val, key, keyIdx, keyList)
+          //
+          // Can be used for a deep copy: walk(v => v, obj)
           function walk(f, obj, bf=false) {
             let x
             if (!obj || typeof(obj) !== 'object') { return obj }
@@ -42,9 +44,10 @@
           // the current fragment and substitute resulting fragment
           // Fn::Macro can contain one call (map) or multiple (list)
           function doMacro(event, context, obj) {
-            if (obj && typeof(obj) === 'object' && 'Fn::Macro' in obj) {
-              const {['Fn::Macro']: mc, ...res} = obj // split out calls
-              return (Array.isArray(mc) ? mc : [mc])
+            while (obj && typeof(obj) === 'object' && 'Fn::Macro' in obj) {
+              const {['Fn::Macro']: mc, ...rest} = obj // split out calls
+              let res = walk(v => v, rest) // deep copy
+              obj = (Array.isArray(mc) ? mc : [mc])
                 .reduce((res, call) =>
                   global[call.Name](Object.assign({}, event, {
                     params: call.Parameters || {},
@@ -305,7 +308,8 @@ switch (mode) {
     const tests = [['tests/t1.yaml', 'tests/t1-result.yaml'],
                    ['tests/t2.yaml', 'tests/t2-result.yaml'],
                    ['tests/t3.yaml', 'tests/t3-result.yaml'],
-                   ['tests/t4.yaml', 'tests/t4-result.yaml']]
+                   ['tests/t4.yaml', 'tests/t4-result.yaml'],
+                   ['tests/t5.yaml', 'tests/t5-result.yaml']]
     for (let [tPath, cPath] of tests) {
         loadTest(tPath, cPath)
     }

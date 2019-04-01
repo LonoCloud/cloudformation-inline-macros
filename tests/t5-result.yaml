@@ -1,0 +1,28 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "InlineJS/InlinePy test 5: recursive eval"
+Transform:
+  - InlineJS-1_0
+Resources:
+  SSMData1:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: value for SSMData1 resource
+  SSMData2:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: value for SSMData2 resource
+  SSMData3:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Type: String
+      Value: value for SSMData3 resource
+Outputs:
+  SSMData1:
+    Value: !<!Sub> '${SSMData1.Value}'
+  SSMData2:
+    Value: !<!Sub> '${SSMData2.Value}'
+  SSMData3:
+    Value: !<!Sub> '${SSMData3.Value}'
+

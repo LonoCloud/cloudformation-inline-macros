@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: test lono-inline part 4
+Description: "InlineJS/InlinePy test 4: TemplateWith"
 Transform: [InlineJS-1_0]
 Parameters:
   PList:

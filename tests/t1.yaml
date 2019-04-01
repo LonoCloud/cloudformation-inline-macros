@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: test InlineJS/InlinePy part 1
+Description: "InlineJS/InlinePy test 1: inserts/appends"
 Transform: [InlineJS-1_0]
 #Transform: [InlinePy-1_0]
 

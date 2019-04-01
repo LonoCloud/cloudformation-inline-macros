@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: test lono-macros part 2
+Description: "InlineJS/InlinePy test 2: loop"
 Transform: [InlineJS-1_0]
 Resources:
   SSMDataWithLoop:
