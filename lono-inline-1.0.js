@@ -124,70 +124,7 @@ const mode = process.argv[2]
 
 function die(code, ...args) { console.error(...args); process.exit(code) }
 
-let res, log, frag, m1, m2
-switch (mode) {
-  case 'walk':
-    frag = {
-      region: 'us-west-2',
-      templateParameterValues: [
-        {abc: {def: 'ghi'}},
-        {jkl: {mno: 'pqr'}} ] }
-
-    log = []
-    console.log("TESTING walk depth first")
-    console.log("FRAG:", JSON.stringify(frag))
-    res = walk((v, ...a) => (log.push(v), v), frag, false)
-    console.log("RES: ", JSON.stringify(res))
-    console.log("LOG:", JSON.stringify(log))
-    assert.deepEqual(frag, res)
-    assert.equal(log.length, 14)
-    assert.deepEqual(log, ["us-west-2","region","ghi","def",{"def":"ghi"},"abc",{"abc":{"def":"ghi"}},"pqr","mno",{"mno":"pqr"},"jkl",{"jkl":{"mno":"pqr"}},[{"abc":{"def":"ghi"}},{"jkl":{"mno":"pqr"}}],"templateParameterValues"])
-
-    log = []
-    console.log("\nTESTING walk breadth first")
-    console.log("FRAG:", JSON.stringify(frag))
-    res = walk((v, ...a) => (log.push(v), v), frag, true)
-    console.log("RES: ", JSON.stringify(res))
-    console.log("LOG:", JSON.stringify(log))
-    assert.deepEqual(frag, res)
-    assert.equal(log.length, 14)
-    assert.deepEqual(log, ["region","templateParameterValues","us-west-2",[{"abc":{"def":"ghi"}},{"jkl":{"mno":"pqr"}}],{"abc":{"def":"ghi"}},{"jkl":{"mno":"pqr"}},"abc",{"def":"ghi"},"def","ghi","jkl",{"mno":"pqr"},"mno","pqr"])
-
-    frag = {
-      "Type": "Number",
-      "Value": {
-        "Fn::Function": [ "Add", 2, {
-          "Fn::Function": [ "Mult", 3, 4 ] } ] } }
-    log = []
-    console.log("\nTESTING walk depth first")
-    console.log("FRAG:", JSON.stringify(frag))
-    res = walk((v, ...a) => (log.push(v), v), frag, false)
-    console.log("RES: ", JSON.stringify(res))
-    console.log("LOG:", JSON.stringify(log))
-    assert.deepEqual(frag, res)
-    assert.equal(log.length, 14)
-    assert.deepEqual(log, ["Number","Type","Add",2,"Mult",3,4,["Mult",3,4],"Fn::Function",{"Fn::Function":["Mult",3,4]},["Add",2,{"Fn::Function":["Mult",3,4]}],"Fn::Function",{"Fn::Function":["Add",2,{"Fn::Function":["Mult",3,4]}]},"Value"])
-    process.exit(0)
-    break
-  case 'merge':
-    m1 = {a: 1, b: 2}
-    m2 = {a: 9, b: 98, c: 0}
-    console.log("TESTING mergeWith add:", JSON.stringify(m1), JSON.stringify(m2))
-    res = mergeWith((a,b) => a+b, m1, m2)
-    console.log("RES:", JSON.stringify(res))
-    assert.deepEqual(res, { a: 10, b: 100, c: 0 })
-
-    m1 = {a: {b: 3, c: 4}}
-    m2 = {a: {b: 5}}
-    console.log("\nTESTING deepMerge:", JSON.stringify(m1), JSON.stringify(m2))
-    res = deepMerge(m1, m2)
-    console.log("RES:", JSON.stringify(res))
-    assert.deepEqual(res, { a: { b: 5, c: 4 } })
-    process.exit(0)
-    break
-  case 'eval':
-    break
-  case 'load':
+function load(tPath, callback) {
     const baseEvt = {
       region: 'us-west-2',
       accountId: 'some-account-id',
@@ -197,29 +134,153 @@ switch (mode) {
       templateParameterValues: {}
     }
 
-    const finalCb = function (err, resp) {
-      console.log('*** RESULT: err:', err, 'resp:')
-      if (!err) {
-        console.log(yamlDump(resp))
-        //console.log(JSON.stringify(resp, null, 2))
+    const fragment = yamlParse(readFileSync(tPath, 'utf8'))
+    let tParams = {}
+    for (const [k, v] of Object.entries(fragment.Parameters || {})) {
+      const val = process.env[k] || v.Default
+      if ((!val) && val !== "") { die(2, `Parameter ${k} is required`) }
+      if (v.Type === 'CommaDelimitedList') {
+        tParams[k] = val ? val.split(/ *, */) : []
+      } else {
+        tParams[k] = val
       }
     }
 
-    for (var tPath of process.argv.slice(3)) {
-        console.log(`*** LOADING: ${tPath}`)
-        const fragment = yamlParse(readFileSync(tPath, 'utf8'))
-        let tParams = {}
-        for (const [k, v] of Object.entries(fragment.Parameters || {})) {
-          const val = process.env[k] || v.Default
-          if (!val) { die(2, `Parameter ${k} is required`) }
-          tParams[k] = (v.Type === 'CommaDelimitedList') ? val.split(/ *, */) : val
+    const event = Object.assign({}, baseEvt,
+            {fragment, templateParameterValues: tParams})
+    exports.handler(event, {}, function (err, resp) {
+        if (err) {
+            callback(err, resp)
+        } else {
+            for (let k of ['JSEval', 'JSMacros', 'PyEval', 'PyMacros']) {
+                delete resp.fragment.Metadata[k]
+            }
+            callback(err, resp)
         }
+    })
+}
 
-        const event = Object.assign({}, baseEvt,
-                {fragment, templateParameterValues: tParams})
-        exports.handler(event, {}, finalCb)
+function loadTest(tPath, cPath) {
+  console.warn(`\nTESTING: expand of ${tPath} == ${cPath}`)
+  load(tPath, function (err, resp) {
+    if (err) {
+      console.warn('ERROR:', err)
+      console.warn("FAILURE")
+      process.exit(1)
     }
-    process.exit(0)
+    let expected = yamlParse(readFileSync(cPath, 'utf8'))
+    let respFragment = Object.assign({}, resp.fragment)
+    // Remove stuff we don't want to check/show
+    delete respFragment.Metadata
+    let ignorer = v => typeof v === 'string' && v.startsWith('Ignore: ')
+        ? 'IGNORED'
+        : v
+    expected = walk(ignorer, expected)
+    respFragment = walk(ignorer, respFragment)
+    try {
+        assert.deepEqual(respFragment, expected)
+        console.warn(`MATCH: expanded ${tPath} == ${cPath}`)
+    } catch (e) {
+        console.warn(`MISMATCH: expanded ${tPath} != ${cPath}`)
+        console.warn(JSON.stringify(respFragment))
+        console.warn(JSON.stringify(expected))
+        console.warn("FAILURE")
+        process.exit(1)
+    }
+    console.warn("SUCCESS")
+  })
+}
+
+
+let res, log, frag, m1, m2
+switch (mode) {
+  case 'load':
+    load(process.argv[3], function(err, resp) {
+        console.warn(yamlDump(resp.fragment))
+        //console.warn(JSON.stringify(resp, null, 2))
+    })
+    break
+  case 'compare':
+    loadTest(process.argv[3], process.argv[4])
+    break
+  case 'test':
+    //
+    // walk tests
+    //
+    frag = {
+      region: 'us-west-2',
+      templateParameterValues: [
+        {abc: {def: 'ghi'}},
+        {jkl: {mno: 'pqr'}} ] }
+
+    log = []
+    console.warn("TESTING walk depth first")
+    console.warn("FRAG:", JSON.stringify(frag))
+    res = walk((v, ...a) => (log.push(v), v), frag, false)
+    console.warn("RES: ", JSON.stringify(res))
+    console.warn("LOG:", JSON.stringify(log))
+    assert.deepEqual(frag, res)
+    assert.equal(log.length, 14)
+    assert.deepEqual(log, ["us-west-2","region","ghi","def",{"def":"ghi"},"abc",{"abc":{"def":"ghi"}},"pqr","mno",{"mno":"pqr"},"jkl",{"jkl":{"mno":"pqr"}},[{"abc":{"def":"ghi"}},{"jkl":{"mno":"pqr"}}],"templateParameterValues"])
+    console.warn("SUCCESS")
+
+    log = []
+    console.warn("\nTESTING walk breadth first")
+    console.warn("FRAG:", JSON.stringify(frag))
+    res = walk((v, ...a) => (log.push(v), v), frag, true)
+    console.warn("RES: ", JSON.stringify(res))
+    console.warn("LOG:", JSON.stringify(log))
+    assert.deepEqual(frag, res)
+    assert.equal(log.length, 14)
+    assert.deepEqual(log, ["region","templateParameterValues","us-west-2",[{"abc":{"def":"ghi"}},{"jkl":{"mno":"pqr"}}],{"abc":{"def":"ghi"}},{"jkl":{"mno":"pqr"}},"abc",{"def":"ghi"},"def","ghi","jkl",{"mno":"pqr"},"mno","pqr"])
+    console.warn("SUCCESS")
+
+    frag = {
+      "Type": "Number",
+      "Value": {
+        "Fn::Function": [ "Add", 2, {
+          "Fn::Function": [ "Mult", 3, 4 ] } ] } }
+    log = []
+    console.warn("\nTESTING walk depth first")
+    console.warn("FRAG:", JSON.stringify(frag))
+    res = walk((v, ...a) => (log.push(v), v), frag, false)
+    console.warn("RES: ", JSON.stringify(res))
+    console.warn("LOG:", JSON.stringify(log))
+    assert.deepEqual(frag, res)
+    assert.equal(log.length, 14)
+    assert.deepEqual(log, ["Number","Type","Add",2,"Mult",3,4,["Mult",3,4],"Fn::Function",{"Fn::Function":["Mult",3,4]},["Add",2,{"Fn::Function":["Mult",3,4]}],"Fn::Function",{"Fn::Function":["Add",2,{"Fn::Function":["Mult",3,4]}]},"Value"])
+    console.warn("SUCCESS")
+
+    //
+    // Merge tests
+    //
+
+    m1 = {a: 1, b: 2}
+    m2 = {a: 9, b: 98, c: 0}
+    console.warn("\nTESTING mergeWith add:", JSON.stringify(m1), JSON.stringify(m2))
+    res = mergeWith((a,b) => a+b, m1, m2)
+    console.warn("RES:", JSON.stringify(res))
+    assert.deepEqual(res, { a: 10, b: 100, c: 0 })
+    console.warn("SUCCESS")
+
+    m1 = {a: {b: 3, c: 4}}
+    m2 = {a: {b: 5}}
+    console.warn("\nTESTING deepMerge:", JSON.stringify(m1), JSON.stringify(m2))
+    res = deepMerge(m1, m2)
+    console.warn("RES:", JSON.stringify(res))
+    assert.deepEqual(res, { a: { b: 5, c: 4 } })
+    console.warn("SUCCESS")
+
+    //
+    // Before and After Compare tests
+    //
+    const tests = [['tests/t1.yaml', 'tests/t1-result.yaml'],
+                   ['tests/t2.yaml', 'tests/t2-result.yaml'],
+                   ['tests/t3.yaml', 'tests/t3-result.yaml'],
+                   ['tests/t4.yaml', 'tests/t4-result.yaml']]
+    for (let [tPath, cPath] of tests) {
+        loadTest(tPath, cPath)
+    }
     break
   default:
     console.error(`Unknown mode ${mode}`)

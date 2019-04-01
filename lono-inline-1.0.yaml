@@ -172,7 +172,7 @@ Resources:
       Role: !GetAtt MacroExecutionRole.Arn
       Code:
         ZipFile: |
-          import sys, os, re, json, traceback
+          import copy, functools, json, math, os, re, string, sys, time, traceback, types
 
           # Call f on every element of obj. Operates in either depth
           # first order (bf == false) or breadth first (bf == true).
@@ -200,6 +200,21 @@ Resources:
                           x = f(walk(f, obj[k], bf), k, i, keyArr)
                           newMap[f(k)] = x
                       return newMap
+
+          # Merge two maps using the result of f(v1, v2) for any keys
+          # that occur in both maps
+          def mergewith(f, a, b):
+            newMap = a.copy()
+            for [k, v] in b.items():
+                if k in newMap: newMap[k] = f(newMap[k], v)
+                else:           newMap[k] = v
+            return newMap
+
+          # Deep merge two maps
+          def deepmerge(a, b):
+            if a and isinstance(a, dict): return mergewith(deepmerge, a, b)
+            else:                         return b
+
 
           # If obj contains 'Fn::Macro', invoke the macros using
           # the current fragment and substitute resulting fragment

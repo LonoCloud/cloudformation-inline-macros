@@ -23,7 +23,8 @@ the result of using the InlineJS macro on a template file:
 
 ```
 cd modules/lono-inline
-./lono-inline-1.0.js load ./lono-inline-1.0-test1.yaml
+./lono-inline-1.0.js load ./tests/t1.yaml
+./lono-inline-1.0.py load ./tests/t1.yaml
 ```
 
 ## Unit tests
