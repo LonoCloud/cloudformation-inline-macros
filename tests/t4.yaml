@@ -30,8 +30,7 @@ Metadata:
         }
         return res
 
-  PyEval: |
-      import random
+  PyImports: [random]
 
   PyMacros:
     TemplateWith: |

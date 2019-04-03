@@ -2,143 +2,136 @@
 
 # Import the mostly common modules
 # This line should match import in snippit
-#import copy, functools, json, math, os, random, re, string, sys, time, traceback, types
-import copy, functools, json, math, os, re, string, sys, time, traceback, types
+import copy, functools, importlib, json, math, os, re, string, sys, time, traceback, types
 
 def definitions():
           global walk, mergewith, deepmerge, handler
 
 #### vvv snip from here vvv ####
 
-          import copy, functools, json, math, os, re, string, sys, time, traceback, types
+          import copy, functools, importlib, json, math, os, re, string, sys, time, traceback, types
 
-          # Call f on every element of obj. Operates in either depth
-          # first order (bf == false) or breadth first (bf == true).
-          # The arguments to f depend on the element type:
+          # Call f on every node of obj. Depth first unless bf is
+          # true. The arguments to f depend on the element type:
           # - array element: f(val, idx, arr)
           # - object key:    f(key)
           # - object value:  f(val, key, keyIdx, keyList)
-          #
-          # Can used for a deep copy: walk(lambda v, *a: v, obj)
           def walk(f, obj, bf=False):
-              if not (isinstance(obj, dict) or isinstance(obj, list)): return obj
-              if bf: # breadth first walk
-                  if isinstance(obj, list):
-                      newList = [f(v, i, obj) for [i, v] in enumerate(obj)]
-                      return [walk(f, v, bf) for v in newList]
-                  elif isinstance(obj, dict):
-                      keyArr = [f(k) for k in sorted(obj.keys())]
-                      kvs = [(k, f(obj[k], k, i, keyArr)) for [i, k] in enumerate(keyArr)]
-                      return {k:walk(f, v, bf) for [k, v] in kvs}
-              else: # depth first walk
-                  if isinstance(obj, list):
-                      return [f(walk(f, v, bf), i, obj) for [i, v] in enumerate(obj)]
-                  elif isinstance(obj, dict):
-                      keyArr = sorted(obj.keys())
-                      newMap = {}
-                      for [i, k] in enumerate(keyArr):
-                          x = f(walk(f, obj[k], bf), k, i, keyArr)
-                          newMap[f(k)] = x
-                      return newMap
+            if not isinstance(obj, (dict, list)): return obj
+            if bf: # breadth first walk
+              if isinstance(obj, list):
+                newList = [f(v, i, obj) for [i, v] in enumerate(obj)]
+                return [walk(f, v, bf) for v in newList]
+              elif isinstance(obj, dict):
+                keys = [f(k) for k in sorted(obj.keys())]
+                kvs = [(k, f(obj[k], k, i, keys)) for [i, k] in enumerate(keys)]
+                return {k:walk(f, v, bf) for [k, v] in kvs}
+            else: # depth first walk
+              if isinstance(obj, list):
+                return [f(walk(f, v, bf), i, obj) for [i, v] in enumerate(obj)]
+              elif isinstance(obj, dict):
+                keys = sorted(obj.keys())
+                m = {}
+                for [i, k] in enumerate(keys):
+                  x = f(walk(f, obj[k], bf), k, i, keys)
+                  m[f(k)] = x
+                return m
 
-          # Merge two maps using the result of f(v1, v2) for any keys
-          # that occur in both maps
+          # Merge using f(v1, v2) for keys that occur in both maps
           def mergewith(f, a, b):
-            newMap = a.copy()
-            for [k, v] in b.items():
-                if k in newMap: newMap[k] = f(newMap[k], v)
-                else:           newMap[k] = v
-            return newMap
+            return {**a, **{k: (f(a[k], v) if k in a else v)
+                for k,v in b.items()}}
 
           # Deep merge two maps
           def deepmerge(a, b):
-            if a and isinstance(a, dict): return mergewith(deepmerge, a, b)
-            else:                         return b
-
+            return mergewith(deepmerge, a, b) if isinstance(a, dict) else b
 
           # If obj contains 'Fn::Macro', invoke the macros using
           # the current fragment and substitute resulting fragment
           # Fn::Macro can contain one call (map) or multiple (list)
-          def doMacro(event, context, obj):
-              while isinstance(obj, dict) and obj.get('Fn::Macro'):
-                  mc = obj['Fn::Macro']
-                  res = walk(lambda v, *a: v, obj) # deep copy
-                  del res['Fn::Macro']
-                  if isinstance(mc, dict): mc = [mc]
-                  for call in mc:
-                      evt = event.copy()
-                      evt.update({
-                          'params': call.get('Parameters', {}),
-                          'fragment': res })
-                      res = globals()[call['Name']](evt, context)
-                  obj = res
-              return obj
+          def doMacro(ns, event, context, obj):
+            while isinstance(obj, dict) and 'Fn::Macro' in obj:
+              mc = obj['Fn::Macro']
+              res = walk(lambda v, *a: v, obj) # deep copy
+              del res['Fn::Macro']
+              for call in [mc] if isinstance(mc, dict) else mc:
+                event = {**event,
+                         **{'params': call.get('Parameters', {}), 'fragment': res}}
+                res = ns[call['Name']](event, context)
+              obj = res
+            return obj
 
           # If obj contains 'Fn::Function', call the first argument
           # as a global function using the remaining arguments.
-          def doFunction(obj, *a):
-              if isinstance(obj, dict) and obj.get('Fn::Function'):
-                  fname, *fargs = obj['Fn::Function']
-                  return globals()[fname](*fargs)
-              return obj
+          def doFunction(ns, obj, *a):
+            if isinstance(obj, dict) and 'Fn::Function' in obj:
+              fname, *fargs = obj['Fn::Function']
+              fn = ns.get(fname, globals().get(fname))
+              return fn(*fargs)
+            return obj
 
           def handler(event, context):
-              print( 'event:', json.dumps(event))
-              resp = {'requestId': event['requestId'],
-                      'status'   : 'success' }
-              try:
-                  frag = event['fragment']
-                  if not 'AWSTemplateFormatVersion' in frag:
-                      raise 'no AWSTemplateFormatVersion in template' 
-                  preEvalDef = frag.get('Metadata', {}).get('PyEval', None)
-                  macroDefs = frag.get('Metadata', {}).get('PyMacros', None)
+            print('event:', json.dumps(event))
+            resp = {'requestId': event['requestId'], 'status': 'success'}
+            try:
+              frag = event['fragment']
+              assert 'AWSTemplateFormatVersion' in frag, 'AWSTemplateFormatVersion missing'
+              meta = frag.get('Metadata', {})
+              importDef = meta.get('PyImports', [])
+              initDef = meta.get('PyInit', None)
+              macroDefs = meta.get('PyMacros', {})
 
-                  # Expose utility functions in global scope
-                  # TODO
-                  
-                  # Eval any PreEval code
-                  if preEvalDef:
-                    # locals defaults to globals if globals is set so
-                    # everything is evaluted/defined in global context
-                    exec(compile(preEvalDef, '', 'exec'), globals())
+              ns = {} # user macro and function definitions
 
-                  # Instantiate macros into global handler functions
-                  if macroDefs:
-                      for [k, v] in macroDefs.items():
-                        code = "def %s(event, context):\n" % k
-                        code += re.sub(r'^', '    ', v, flags=re.MULTILINE)
-                        exec(compile(code, '', 'exec'))
-                        globals()[k] = locals()[k]
+              # Additional imports
+              for imp in importDef:
+                globals()[imp] = importlib.import_module(imp)
 
-                  # Do breadth first macro invocation (i.e. start with
-                  # the top-level macros and work down the tree). This
-                  # is unlike how standard CloudFormation macros work
-                  # which is depth first, but it is more similar to
-                  # Lisp macros.
-                  frag = walk(lambda obj, *a, **kw: doMacro(event, context, obj),
-                          [frag], True)[0]
+              # Run initDef with locals set to ns
+              if initDef:
+                gtmp = {**globals(), **{'event':  event, 'context': context}}
+                exec(compile(initDef, '', 'exec'), gtmp, ns)
 
-                  # Do depth first invocation of functions
-                  frag = walk(doFunction, [frag], False)[0]
+              # Instantiate macros in ns
+              for [k, v] in macroDefs.items():
+                code = "def %s(event, context):\n" % k
+                code += re.sub(r'^', '  ', v, flags=re.MULTILINE)
+                exec(compile(code, '', 'exec'))
+                ns[k] = locals()[k]
 
-                  # Return expected response object with new fragment
-                  print('callback fragment:', json.dumps(frag))
-                  resp['fragment'] = frag
+              # Do breadth first macro invocation (outside in). This
+              # is unlike standard CFN macros which are depth first,
+              # but more similar to Lisp macros.
+              frag = walk(lambda obj, *a: doMacro(ns, event, context, obj),
+                  [frag], True)[0]
 
-              except Exception as e:
-                  traceback.print_exc()
-                  #print('caught error:', e)
-                  resp['status'] = 'failure'
-                  resp['errorMessage'] = str(e)
-              return resp
+              # Do depth first invocation of functions
+              frag = walk(lambda *a: doFunction(ns, *a), [frag], False)[0]
+
+              # Response object with new fragment
+              print('new fragment:', json.dumps(frag))
+              resp['fragment'] = frag
+
+            except Exception as e:
+              traceback.print_exc()
+              resp['status'] = 'failure'
+              resp['errorMessage'] = str(e)
+            return resp
 
 #### ^^^ snip to here ^^^ ####
 
 from cfn_flip import to_yaml, to_json
 
+mode = sys.argv[1]
+VERBOSE = os.environ.get('VERBOSE', None)
+
 definitions()
 
-mode = sys.argv[1]
+if not VERBOSE:
+    orig_print = print
+    def print(*args, **kw):
+        if kw.get('file') == sys.stderr:
+            orig_print(*args, **kw)
 
 def warn(*a, **kw):
     print(*a, file=sys.stderr, **kw)
@@ -168,9 +161,10 @@ def load(tPath):
         'fragment': fragment,
         'templateParameterValues': tParams})
     resp = handler(event, {})
-    for k in ['JSEval', 'JSMacros', 'PyEval', 'PyMacros']:
-        if k in resp['fragment']['Metadata']:
-            del resp['fragment']['Metadata'][k]
+    if resp['status'] == 'success':
+        for k in ['JSEval', 'JSMacros', 'PyEval', 'PyMacros']:
+            if k in resp['fragment']['Metadata']:
+                del resp['fragment']['Metadata'][k]
     return resp
 
 def loadTest(tPath, cPath):
@@ -199,7 +193,10 @@ def loadTest(tPath, cPath):
     warn('SUCCESS')
 
 if mode == 'load':
-    warn(to_yaml(json.dumps(load(sys.argv[2])['fragment'])))
+    res = load(sys.argv[2])
+    print(res)
+    if res['status'] != 'success': sys.exit(1)
+    warn(to_yaml(json.dumps(res['fragment'])))
 elif mode == 'compare':
     loadTest(sys.argv[2], sys.argv[3])
 elif mode == 'test':
@@ -217,7 +214,7 @@ elif mode == 'test':
     warn("FRAG:", json.dumps(frag))
     res = walk(lambda v, *a: log.append(v) or v, frag, False)
     warn("RES: ", json.dumps(res))
-    warn("LOG:", json.dumps(log))
+    print("LOG:", json.dumps(log))
     assert frag == res
     assert len(log) == 14
     assert log == ["us-west-2","region","ghi","def",{"def":"ghi"},"abc",{"abc":{"def":"ghi"}},"pqr","mno",{"mno":"pqr"},"jkl",{"jkl":{"mno":"pqr"}},[{"abc":{"def":"ghi"}},{"jkl":{"mno":"pqr"}}],"templateParameterValues"]
@@ -228,7 +225,7 @@ elif mode == 'test':
     warn("FRAG:", json.dumps(frag))
     res = walk(lambda v, *a: log.append(v) or v, frag, True)
     warn("RES: ", json.dumps(res))
-    warn("LOG:", json.dumps(log))
+    print("LOG:", json.dumps(log))
     assert frag == res
     assert len(log) == 14
     assert log == ["region","templateParameterValues","us-west-2",[{"abc":{"def":"ghi"}},{"jkl":{"mno":"pqr"}}],{"abc":{"def":"ghi"}},{"jkl":{"mno":"pqr"}},"abc",{"def":"ghi"},"def","ghi","jkl",{"mno":"pqr"},"mno","pqr"]
@@ -244,7 +241,7 @@ elif mode == 'test':
     warn("FRAG:", json.dumps(frag))
     res = walk(lambda v, *a: log.append(v) or v, frag, False)
     warn("RES: ", json.dumps(res))
-    warn("LOG:", json.dumps(log))
+    print("LOG:", json.dumps(log))
     assert frag == res
     assert len(log) == 14
     assert log == ["Number","Type","Add",2,"Mult",3,4,["Mult",3,4],"Fn::Function",{"Fn::Function":["Mult",3,4]},["Add",2,{"Fn::Function":["Mult",3,4]}],"Fn::Function",{"Fn::Function":["Add",2,{"Fn::Function":["Mult",3,4]}]},"Value"]
@@ -281,6 +278,6 @@ elif mode == 'test':
     for [tPath, cPath] in tests:
         loadTest(tPath, cPath)
 else:
-    print("Unknown mode %s" % mode)
+    warn("Unknown mode %s" % mode)
     sys.exit(1)
 

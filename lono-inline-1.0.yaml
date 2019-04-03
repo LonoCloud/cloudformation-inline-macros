@@ -5,22 +5,8 @@ AWSTemplateFormatVersion: 2010-09-09
 # macros that allows macro and function definitions to be declared and
 # used inline in the same cloudformation template.
 #
-# To use these macros in a template, ...
+# See README.md for more information
 #
-# The function wrapper has the same top-level parameters as a Lambda
-# function handler (event, context). The event parameters has the
-# following structure:
-#
-#   {
-#     region: ...,                  // region where macro resides
-#     accountId: ...,               // invoking account ID
-#     fragment: ...,                // sibling template fragment (JSON)
-#     transformId: ...,             // name of macro
-#     params: ...,                  // specified parameters
-#     requestId: ...,               // ID of request
-#     templateParameterValues: ..., //
-#   }
-
 Resources:
   MacroExecutionRole:
     Type: AWS::IAM::Role
@@ -54,9 +40,8 @@ Resources:
       Role: !GetAtt MacroExecutionRole.Arn
       Code:
         ZipFile: |
-          // Call f on every element of obj. Operates in either depth
-          // first order (bf == false) or breadth first (bf == true).
-          // The arguments to f depend on the element type:
+          // Call f on every node of obj. Depth first unless bf is
+          // true. The arguments to f depend on the element type:
           // - array element: f(val, idx, arr)
           // - object key:    f(key)
           // - object value:  f(val, key, keyIdx, keyList)
@@ -77,8 +62,7 @@ Resources:
                     (x = f(walk(f, obj[k], bf), k, i, arr), a[f(k)] = x, a), {})
           }
 
-          // Merge two maps using the result of f(v1, v2) for any keys
-          // that occur in both maps
+          // Merge using f(v1, v2) for keys that occur in both maps
           function mergeWith(f, a, b) {
             return Object.entries(b).reduce((m, [k, v]) =>
                 (m[k] = k in m ? f(m[k], v) : v, m), Object.assign({}, a))
@@ -92,12 +76,13 @@ Resources:
           // If obj contains 'Fn::Macro', invoke the macros using
           // the current fragment and substitute resulting fragment
           // Fn::Macro can contain one call (map) or multiple (list)
-          function doMacro(event, context, obj) {
-            if (obj && typeof(obj) === 'object' && 'Fn::Macro' in obj) {
-              const {['Fn::Macro']: mc, ...res} = obj // split out calls
-              return (Array.isArray(mc) ? mc : [mc])
+          function doMacro(ns, event, context, obj) {
+            while (obj && typeof(obj) === 'object' && 'Fn::Macro' in obj) {
+              const {['Fn::Macro']: mc, ...rest} = obj // split out calls
+              let res = walk(v => v, rest) // deep copy
+              obj = (Array.isArray(mc) ? mc : [mc])
                 .reduce((res, call) =>
-                  global[call.Name](Object.assign({}, event, {
+                  ns[call.Name](Object.assign({}, event, {
                     params: call.Parameters || {},
                     fragment: res
                   }), context),
@@ -107,59 +92,60 @@ Resources:
           }
 
           // If obj contains 'Fn::Function', call the first argument
-          // as a global function using the remaining arguments.
-          function doFunction(obj) {
+          // as a function using the remaining arguments.
+          function doFunction(ns, obj) {
             if (obj && typeof(obj) === 'object' && 'Fn::Function' in obj) {
               const [fname, ...fargs] = obj['Fn::Function']
-              return global[fname](...fargs)
+              const fn = fname in ns ? ns[fname] : global[fname]
+              return fn(...fargs)
             }
             return obj
           }
 
+          let cnt = 0
           exports.handler = function(event, context, callback) {
-            console.log( 'event:', JSON.stringify(event))
+            console.log('event:', JSON.stringify(event))
             try {
               let frag = event.fragment
               if (!('AWSTemplateFormatVersion' in frag)) {
-                throw new Error('no AWSTemplateFormatVersion in template')
+                throw new Error('AWSTemplateFormatVersion missing')
               }
-              const preEvalDef = frag.Metadata && frag.Metadata.JSEval
-              const macroDefs = frag.Metadata && frag.Metadata.JSMacros
+              const initDef = frag.Metadata && frag.Metadata.JSInit
+              const macroDefs = frag.Metadata && frag.Metadata.JSMacros || {}
 
               // Expose utility functions in global scope
               Object.assign(global, {walk, mergeWith, deepMerge})
 
-              // Eval any PreEval code
-              if (preEvalDef) {
-                // Magic to cause eval to evaluate in global scope
-                // http://perfectionkills.com/global-eval-what-are-the-options/
-                (1, eval)(preEvalDef)
+              let ns = {} // user macro and function definitions
+
+              // Run initDef with exports set to ns
+              if (initDef) {
+                const initFn = new Function('event', 'context', 'exports', initDef)
+                initFn(event, context, ns)
               }
 
-              // Instantiate macros into global handler functions
-              if (macroDefs) {
-                Object.entries(macroDefs).forEach(([k, v]) =>
-                    global[k] = new Function( 'event', 'context', v))
-              }
+              // Instantiate macros in ns
+              Object.entries(macroDefs).forEach(([k, v]) =>
+                      ns[k] = new Function('event', 'context', v))
 
-              // Do breadth first macro invocation (i.e. start with
-              // the top-level macros and work down the tree). This is
-              // unlike how standard CloudFormation macros work which
-              // is depth first, but it is more similar to Lisp
-              // macros.
-              frag = walk(doMacro.bind(null, event, context),
+              // Do breadth first macro invocation (outside in). This
+              // is unlike standard CFN macros which are depth first,
+              // but more similar to Lisp macros.
+              frag = walk(doMacro.bind(null, ns, event, context),
                       [frag], true)[0]
 
               // Do depth first invocation of functions
-              frag = walk(doFunction, [frag], false)[0]
+              frag = walk(doFunction.bind(null, ns), [frag], false)[0]
+              frag = deepMerge(frag, {Outputs: {Counter: {Value: cnt.toString()}}})
+              cnt += 1
 
-              // Return expected response object with new fragment
-              console.log( 'callback fragment:', JSON.stringify(frag))
+              // Response object with new fragment
+              console.log('new fragment:', JSON.stringify(frag))
               callback(null, { requestId:  event.requestId,
                                status:     'success',
                                fragment:   frag })
             } catch (e) {
-              console.error( 'caught error:', e)
+              console.error('caught error:', e)
               callback(e)
             }
           }
@@ -172,126 +158,114 @@ Resources:
       Role: !GetAtt MacroExecutionRole.Arn
       Code:
         ZipFile: |
-          import copy, functools, json, math, os, re, string, sys, time, traceback, types
+          import copy, functools, importlib, json, math, os, re, string, sys, time, traceback, types
 
-          # Call f on every element of obj. Operates in either depth
-          # first order (bf == false) or breadth first (bf == true).
-          # The arguments to f depend on the element type:
+          # Call f on every node of obj. Depth first unless bf is
+          # true. The arguments to f depend on the element type:
           # - array element: f(val, idx, arr)
           # - object key:    f(key)
           # - object value:  f(val, key, keyIdx, keyList)
           def walk(f, obj, bf=False):
-              if not (isinstance(obj, dict) or isinstance(obj, list)): return obj
-              if bf: # breadth first walk
-                  if isinstance(obj, list):
-                      newList = [f(v, i, obj) for [i, v] in enumerate(obj)]
-                      return [walk(f, v, bf) for v in newList]
-                  elif isinstance(obj, dict):
-                      keyArr = [f(k) for k in sorted(obj.keys())]
-                      kvs = [(k, f(obj[k], k, i, keyArr)) for [i, k] in enumerate(keyArr)]
-                      return {k:walk(f, v, bf) for [k, v] in kvs}
-              else: # depth first walk
-                  if isinstance(obj, list):
-                      return [f(walk(f, v, bf), i, obj) for [i, v] in enumerate(obj)]
-                  elif isinstance(obj, dict):
-                      keyArr = sorted(obj.keys())
-                      newMap = {}
-                      for [i, k] in enumerate(keyArr):
-                          x = f(walk(f, obj[k], bf), k, i, keyArr)
-                          newMap[f(k)] = x
-                      return newMap
+            if not isinstance(obj, (dict, list)): return obj
+            if bf: # breadth first walk
+              if isinstance(obj, list):
+                newList = [f(v, i, obj) for [i, v] in enumerate(obj)]
+                return [walk(f, v, bf) for v in newList]
+              elif isinstance(obj, dict):
+                keys = [f(k) for k in sorted(obj.keys())]
+                kvs = [(k, f(obj[k], k, i, keys)) for [i, k] in enumerate(keys)]
+                return {k:walk(f, v, bf) for [k, v] in kvs}
+            else: # depth first walk
+              if isinstance(obj, list):
+                return [f(walk(f, v, bf), i, obj) for [i, v] in enumerate(obj)]
+              elif isinstance(obj, dict):
+                keys = sorted(obj.keys())
+                m = {}
+                for [i, k] in enumerate(keys):
+                  x = f(walk(f, obj[k], bf), k, i, keys)
+                  m[f(k)] = x
+                return m
 
-          # Merge two maps using the result of f(v1, v2) for any keys
-          # that occur in both maps
+          # Merge using f(v1, v2) for keys that occur in both maps
           def mergewith(f, a, b):
-            newMap = a.copy()
-            for [k, v] in b.items():
-                if k in newMap: newMap[k] = f(newMap[k], v)
-                else:           newMap[k] = v
-            return newMap
+            return {**a, **{k: (f(a[k], v) if k in a else v)
+                for k,v in b.items()}}
 
           # Deep merge two maps
           def deepmerge(a, b):
-            if a and isinstance(a, dict): return mergewith(deepmerge, a, b)
-            else:                         return b
-
+            return mergewith(deepmerge, a, b) if isinstance(a, dict) else b
 
           # If obj contains 'Fn::Macro', invoke the macros using
           # the current fragment and substitute resulting fragment
           # Fn::Macro can contain one call (map) or multiple (list)
-          def doMacro(event, context, obj):
-              if isinstance(obj, dict) and obj.get('Fn::Macro'):
-                  mc = obj['Fn::Macro']
-                  del obj['Fn::Macro']
-                  res = obj
-                  if isinstance(mc, dict): mc = [mc]
-                  for call in mc:
-                      evt = event.copy()
-                      evt.update({
-                          'params': call.get('Parameters', {}),
-                          'fragment': res })
-                      res = globals()[call['Name']](evt, context)
-                  return res
-              else:
-                  return obj
+          def doMacro(ns, event, context, obj):
+            while isinstance(obj, dict) and 'Fn::Macro' in obj:
+              mc = obj['Fn::Macro']
+              res = walk(lambda v, *a: v, obj) # deep copy
+              del res['Fn::Macro']
+              for call in [mc] if isinstance(mc, dict) else mc:
+                event = {**event,
+                         **{'params': call.get('Parameters', {}), 'fragment': res}}
+                res = ns[call['Name']](event, context)
+              obj = res
+            return obj
 
           # If obj contains 'Fn::Function', call the first argument
           # as a global function using the remaining arguments.
-          def doFunction(obj, *a):
-              if isinstance(obj, dict) and obj.get('Fn::Function'):
-                  fname, *fargs = obj['Fn::Function']
-                  return globals()[fname](*fargs)
-              return obj
+          def doFunction(ns, obj, *a):
+            if isinstance(obj, dict) and 'Fn::Function' in obj:
+              fname, *fargs = obj['Fn::Function']
+              fn = ns.get(fname, globals().get(fname))
+              return fn(*fargs)
+            return obj
 
           def handler(event, context):
-              print( 'event:', json.dumps(event))
-              resp = {'requestId': event['requestId'],
-                      'status'   : 'success' }
-              try:
-                  frag = event['fragment']
-                  if not 'AWSTemplateFormatVersion' in frag:
-                      raise 'no AWSTemplateFormatVersion in template' 
-                  preEvalDef = frag.get('Metadata', {}).get('PyEval', None)
-                  macroDefs = frag.get('Metadata', {}).get('PyMacros', None)
+            print('event:', json.dumps(event))
+            resp = {'requestId': event['requestId'], 'status': 'success'}
+            try:
+              frag = event['fragment']
+              assert 'AWSTemplateFormatVersion' in frag, 'AWSTemplateFormatVersion missing'
+              meta = frag.get('Metadata', {})
+              importDef = meta.get('PyImports', [])
+              initDef = meta.get('PyInit', None)
+              macroDefs = meta.get('PyMacros', {})
 
-                  # Expose utility functions in global scope
-                  # TODO
-                  
-                  # Eval any PreEval code
-                  if preEvalDef:
-                    # locals defaults to globals if globals is set so
-                    # everything is evaluted/defined in global context
-                    exec(compile(preEvalDef, '', 'exec'), globals())
+              ns = {} # user macro and function definitions
 
-                  # Instantiate macros into global handler functions
-                  if macroDefs:
-                      for [k, v] in macroDefs.items():
-                        code = "def %s(event, context):\n" % k
-                        code += re.sub(r'^', '    ', v, flags=re.MULTILINE)
-                        exec(compile(code, '', 'exec'))
-                        globals()[k] = locals()[k]
+              # Additional imports
+              for imp in importDef:
+                globals()[imp] = importlib.import_module(imp)
 
-                  # Do breadth first macro invocation (i.e. start with
-                  # the top-level macros and work down the tree). This
-                  # is unlike how standard CloudFormation macros work
-                  # which is depth first, but it is more similar to
-                  # Lisp macros.
-                  frag = walk(lambda obj, *a, **kw: doMacro(event, context, obj),
-                          [frag], True)[0]
+              # Run initDef with locals set to ns
+              if initDef:
+                gtmp = {**globals(), **{'event':  event, 'context': context}}
+                exec(compile(initDef, '', 'exec'), gtmp, ns)
 
-                  # Do depth first invocation of functions
-                  frag = walk(doFunction, [frag], False)[0]
+              # Instantiate macros in ns
+              for [k, v] in macroDefs.items():
+                code = "def %s(event, context):\n" % k
+                code += re.sub(r'^', '  ', v, flags=re.MULTILINE)
+                exec(compile(code, '', 'exec'))
+                ns[k] = locals()[k]
 
-                  # Return expected response object with new fragment
-                  print('callback fragment:', json.dumps(frag))
-                  resp['fragment'] = frag
+              # Do breadth first macro invocation (outside in). This
+              # is unlike standard CFN macros which are depth first,
+              # but more similar to Lisp macros.
+              frag = walk(lambda obj, *a: doMacro(ns, event, context, obj),
+                  [frag], True)[0]
 
-              except Exception as e:
-                  traceback.print_exc()
-                  #print('caught error:', e)
-                  resp['status'] = 'failure'
-                  resp['errorMessage'] = str(e)
-              return resp
+              # Do depth first invocation of functions
+              frag = walk(lambda *a: doFunction(ns, *a), [frag], False)[0]
+
+              # Response object with new fragment
+              print('new fragment:', json.dumps(frag))
+              resp['fragment'] = frag
+
+            except Exception as e:
+              traceback.print_exc()
+              resp['status'] = 'failure'
+              resp['errorMessage'] = str(e)
+            return resp
 
   InlineJSMacro:
     Type: AWS::CloudFormation::Macro
@@ -339,3 +313,4 @@ Outputs:
 
   MacroLogPolicy:
     Value: !Ref MacroLogPolicy
+
