@@ -1,0 +1,21 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Example 3 - Simple loop
+Transform: [InlinePy-1_0]
+
+Metadata:
+  PyMacros:
+    Loop: |
+        fragment, params = event['fragment'], event['params']
+        for i in range(1, params['Count']+1):
+            fragment[params['Prefix']+str(i)] = params['Fragment']
+        return fragment
+
+Outputs:
+  'Fn::Macro':
+    Name: Loop
+    Parameters:
+      Prefix: "MyOutput"
+      Count: 3
+      Fragment:
+        Value: "An output value"
+

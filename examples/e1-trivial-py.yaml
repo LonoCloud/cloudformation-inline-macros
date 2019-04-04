@@ -1,0 +1,18 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Example 1 - trivial example
+Transform: [InlinePy-1_0]
+
+Metadata:
+  PyMacros:
+    Foo: |
+        print(event, file=sys.stderr)
+        return "bar"
+
+Resources: {}
+
+Outputs:
+  MyOutput:
+    Value:
+      'Fn::Macro':
+        - Name: Foo
+

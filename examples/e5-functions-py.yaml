@@ -1,0 +1,12 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Example 5 - functions
+Transform: [InlinePy-1_0]
+
+Metadata:
+  PyInit: |
+      def Add(a, b): return a + b
+      def Mult(a, b): return a * b
+
+Outputs:
+  Output:
+    Value: !Function [Add, 5, !Function [Mult, 6, 7] ]

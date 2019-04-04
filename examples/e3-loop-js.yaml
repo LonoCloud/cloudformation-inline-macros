@@ -1,0 +1,22 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Example 3 - Simple loop
+Transform: [InlineJS-1_0]
+
+Metadata:
+  JSMacros:
+    Loop: |
+        const { fragment, params: {Prefix, Fragment, Count} } = event
+        for (let i = 1; i <= Count; i++) {
+            Object.assign(fragment, {[Prefix+i]: Fragment})
+        }
+        return fragment
+
+Outputs:
+  'Fn::Macro':
+    Name: Loop
+    Parameters:
+      Prefix: "MyOutput"
+      Count: 3
+      Fragment:
+        Value: "An output value"
+

@@ -1,0 +1,14 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Example 2 - Yaml Tags
+Transform: [InlineJS-1_0]
+
+Metadata:
+  JSMacros:
+    Foo: return "bar"
+
+Resources: {}
+
+Outputs:
+  MyOutput:
+      Value: !Macro {Name: Foo}
+

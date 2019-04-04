@@ -1,0 +1,36 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Example 7 - merge with class
+Transform: [InlineJS-1_0]
+
+Metadata:
+  JSMacros:
+    Merger: |
+        return walk((v) => {
+            if (v && v.constructor === Object && 'Merge' in v) {
+                cfrag = event.fragment.Metadata.Classes[v.Merge]
+                delete v.Merge
+                return deepMerge(cfrag, v)
+            }
+            return v
+        }, event.fragment)
+
+  Classes:
+    SSMString:
+      Type: 'AWS::SSM::Parameter'
+      Properties:
+        Type: String
+        Value: default class value
+
+'Fn::Macro':
+  Name: Merger
+
+Resources:
+    SSM1:
+      Merge: SSMString
+      Properties:
+        Value: SSM1 Value
+
+    SSM2:
+      Merge: SSMString
+      Properties:
+        Value: SSM2 Value

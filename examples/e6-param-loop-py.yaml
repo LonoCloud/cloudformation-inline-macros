@@ -1,0 +1,41 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Example 6 - Loop over a param list
+Transform: [InlinePy-1_0]
+
+Parameters:
+  List1:
+    Type: CommaDelimitedList
+    Default: "Abc, Def"
+
+  List2:
+    Type: CommaDelimitedList
+    Default: "Foo, Bar, Baz"
+
+Metadata:
+  PyMacros:
+    ParamLoop: |
+        fragment, params = event['fragment'], event['params']
+        def replacer(v, i):
+            if type(v) == str: return re.sub(r"%", i, v, flags=re.MULTILINE)
+            else: return v
+        for item in event['templateParameterValues'][params['Param']]:
+            fragment.update(walk(
+                lambda v, *a: replacer(v, item), params['Fragment']))
+        return fragment
+
+Outputs:
+  'Fn::Macro':
+    - Name: ParamLoop
+      Parameters:
+        Param: List1
+        Fragment:
+          List1Output%:
+            Value: "List1Output% value"
+    - Name: ParamLoop
+      Parameters:
+        Param: List2
+        Fragment:
+          List2Output%:
+            Value: "List2Output% value"
+
+

@@ -1,0 +1,39 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Example 6 - Loop over a param list
+Transform: [InlineJS-1_0]
+
+Parameters:
+  List1:
+    Type: CommaDelimitedList
+    Default: "Abc, Def"
+
+  List2:
+    Type: CommaDelimitedList
+    Default: "Foo, Bar, Baz"
+
+Metadata:
+  JSMacros:
+    ParamLoop: |
+        const { fragment, params: {Param, Fragment} } = event
+        for (let item of event.templateParameterValues[Param]) {
+          Object.assign(fragment, walk(
+            v => typeof v === 'string' ? v.replace(/%/, item) : v,
+            Fragment))
+        }
+        return fragment
+
+Outputs:
+  'Fn::Macro':
+    - Name: ParamLoop
+      Parameters:
+        Param: List1
+        Fragment:
+          List1Output%:
+            Value: "List1Output% value"
+    - Name: ParamLoop
+      Parameters:
+        Param: List2
+        Fragment:
+          List2Output%:
+            Value: "List2Output% value"
+

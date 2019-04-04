@@ -1,0 +1,14 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Example 5 - functions
+Transform: [InlineJS-1_0]
+
+Metadata:
+  JSInit: |
+      function Add(a, b) { return a + b }
+      function Mult(a, b) { return a * b }
+      Object.assign(exports, {Add, Mult})
+
+Outputs:
+  Output:
+    Value: !Function [Add, 5, !Function [Mult, 6, 7] ]
+

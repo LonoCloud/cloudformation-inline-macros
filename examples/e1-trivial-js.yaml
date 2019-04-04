@@ -1,0 +1,18 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Example 1 - trivial example
+Transform: [InlineJS-1_0]
+
+Metadata:
+  JSMacros:
+    Foo: |
+        console.warn(event)
+        return "bar"
+
+Resources: {}
+
+Outputs:
+  MyOutput:
+    Value:
+      'Fn::Macro':
+        - Name: Foo
+

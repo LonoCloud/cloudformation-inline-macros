@@ -1,0 +1,29 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Example 4 - Simple conditional
+Transform: [InlineJS-1_0]
+
+Parameters:
+  CondParam:
+    Type: String
+    Default: "yes"
+
+Metadata:
+  JSMacros:
+    Conditional: |
+        const { fragment, templateParameterValues, params: {Fragment} } = event
+        if (templateParameterValues.CondParam in {"yes":1,"true":1}) {
+            Object.assign(fragment, Fragment)
+        }
+        return fragment
+
+Outputs:
+  FixedOutput:
+    Value: a fixed output value
+
+  'Fn::Macro':
+    Name: Conditional
+    Parameters:
+      Fragment:
+        ConditionalOutput:
+          Value: "An conditional output value"
+

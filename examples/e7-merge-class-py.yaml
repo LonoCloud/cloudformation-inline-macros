@@ -1,0 +1,35 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Example 7 - merge with class
+Transform: [InlinePy-1_0]
+
+Metadata:
+  PyMacros:
+    Merger: |
+        def merger(v, *a):
+            if isinstance(v, dict) and 'Merge' in v:
+                cfrag = event['fragment']['Metadata']['Classes'][v['Merge']]
+                del v['Merge']
+                return deepmerge(cfrag, v)
+            return v
+        return walk(merger, event['fragment'])
+
+  Classes:
+    SSMString:
+      Type: 'AWS::SSM::Parameter'
+      Properties:
+        Type: String
+        Value: default class value
+
+'Fn::Macro':
+  Name: Merger
+
+Resources:
+    SSM1:
+      Merge: SSMString
+      Properties:
+        Value: SSM1 Value
+
+    SSM2:
+      Merge: SSMString
+      Properties:
+        Value: SSM2 Value

@@ -1,0 +1,27 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Example 4 - Simple conditional
+Transform: [InlinePy-1_0]
+
+Parameters:
+  CondParam:
+    Type: String
+    Default: "yes"
+
+Metadata:
+  PyMacros:
+    Conditional: |
+        if event['templateParameterValues']['CondParam'] in ["yes", "true"]:
+            event['fragment'].update(event['params']['Fragment'])
+        return event['fragment']
+
+Outputs:
+  FixedOutput:
+    Value: a fixed output value
+
+  'Fn::Macro':
+    Name: Conditional
+    Parameters:
+      Fragment:
+        ConditionalOutput:
+          Value: "An conditional output value"
+
