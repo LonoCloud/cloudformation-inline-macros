@@ -4,11 +4,12 @@ Transform: [InlineJS-1_0]
 #Transform: [InlinePy-1_0]
 
 Metadata:
-  JSEval: |
+  JSInit: |
       function Add(a, b) { return a + b }
       function Mult(a, b) { return a * b }
+      Object.assign(exports, {Add, Mult})
 
-  PyEval: |
+  PyInit: |
       def Add(a, b): return a + b
       def Mult(a, b): return a * b
 

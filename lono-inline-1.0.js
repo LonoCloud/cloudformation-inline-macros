@@ -59,8 +59,7 @@
           function doFunction(ns, obj) {
             if (obj && typeof(obj) === 'object' && 'Fn::Function' in obj) {
               const [fname, ...fargs] = obj['Fn::Function']
-              const fn = fname in ns ? ns[fname] : global[fname]
-              return fn(...fargs)
+              return ns[fname](...fargs)
             }
             return obj
           }

@@ -62,12 +62,11 @@ def definitions():
             return obj
 
           # If obj contains 'Fn::Function', call the first argument
-          # as a global function using the remaining arguments.
+          # as a function using the remaining arguments.
           def doFunction(ns, obj, *a):
             if isinstance(obj, dict) and 'Fn::Function' in obj:
               fname, *fargs = obj['Fn::Function']
-              fn = ns.get(fname, globals().get(fname))
-              return fn(*fargs)
+              return ns[fname](*fargs)
             return obj
 
           def handler(event, context):
@@ -162,7 +161,7 @@ def load(tPath):
         'templateParameterValues': tParams})
     resp = handler(event, {})
     if resp['status'] == 'success':
-        for k in ['JSEval', 'JSMacros', 'PyEval', 'PyMacros']:
+        for k in ['JSInit', 'JSMacros', 'PyInit', 'PyMacros']:
             if k in resp['fragment']['Metadata']:
                 del resp['fragment']['Metadata'][k]
     return resp
