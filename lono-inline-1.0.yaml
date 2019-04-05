@@ -96,13 +96,11 @@ Resources:
           function doFunction(ns, obj) {
             if (obj && typeof(obj) === 'object' && 'Fn::Function' in obj) {
               const [fname, ...fargs] = obj['Fn::Function']
-              const fn = fname in ns ? ns[fname] : global[fname]
-              return fn(...fargs)
+              return ns[fname](...fargs)
             }
             return obj
           }
 
-          let cnt = 0
           exports.handler = function(event, context, callback) {
             console.log('event:', JSON.stringify(event))
             try {
@@ -136,8 +134,6 @@ Resources:
 
               // Do depth first invocation of functions
               frag = walk(doFunction.bind(null, ns), [frag], false)[0]
-              frag = deepMerge(frag, {Outputs: {Counter: {Value: cnt.toString()}}})
-              cnt += 1
 
               // Response object with new fragment
               console.log('new fragment:', JSON.stringify(frag))
@@ -211,12 +207,11 @@ Resources:
             return obj
 
           # If obj contains 'Fn::Function', call the first argument
-          # as a global function using the remaining arguments.
+          # as a function using the remaining arguments.
           def doFunction(ns, obj, *a):
             if isinstance(obj, dict) and 'Fn::Function' in obj:
               fname, *fargs = obj['Fn::Function']
-              fn = ns.get(fname, globals().get(fname))
-              return fn(*fargs)
+              return ns[fname](*fargs)
             return obj
 
           def handler(event, context):
