@@ -117,22 +117,7 @@ InlineJS macros have been resolved. Note that `MyOutput` output now
 has a value that is just "bar" in place of the macro call.
 
 
-## Example 2: Yaml Tags
-
-We can simplify the above example slightly be using Yaml Tag
-abbreviations. Here is the revised Outputs section of the template:
-
-```yaml
-Outputs:
-  MyOutput:
-      Value: !Macro {Name: Foo}
-```
-
-Note that this only works in situations where the macro call does not
-need to have any sibling data.
-
-
-## Example 3: Simple Loop
+## Example 2: Simple Loop
 
 If you have used CloudFormation templates "in anger" you will soon run
 into a situation where you would like to repeat a section of the
@@ -188,7 +173,7 @@ Finally, the Fragment parameter specifies what the content will be of
 each repeated element.
 
 
-## Example 4: Simple Conditional
+## Example 3: Simple Conditional
 
 Consider the following template:
 
@@ -257,7 +242,7 @@ Outputs:
     Value: a fixed output value
 ```
 
-## Example 5: Inline Functions
+## Example 4: Inline Functions
 
 In addition to user defined inline macros, Inline\* also supports user
 defined inline functions. Functions are defined in within the
@@ -322,7 +307,7 @@ modules can be imported in the PyInit code section and then later used
 in PyMacro defintions.
 
 
-## Example 6: Loop over a Parameter List
+## Example 5: Loop over a Parameter List
 
 Now lets consider a slightly more complex macro:
 
@@ -385,7 +370,7 @@ There are several new concepts introduced by the template above:
   fragment that is inserted into the tree.
 
 
-## Example 7: Merge with a Fragment Class
+## Example 6: Merge with a Fragment Class
 
 There is a certain class of macros that want to access template
 context that is outside (above) the point in the template where the

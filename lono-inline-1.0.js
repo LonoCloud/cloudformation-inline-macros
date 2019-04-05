@@ -115,31 +115,9 @@
 
 const assert = require('assert')
 const { readFileSync } = require('fs')
-const { schema } = require('yaml-cfn')
-const jsYaml = require('js-yaml')
+const { yamlParse, yamlDump } = require('yaml-cfn')
 const mode = process.argv[2]
 const VERBOSE = process.env['VERBOSE']
-
-/////////////////////////////////
-// Add yaml types
-
-let yamlTypeMacroMap = new jsYaml.Type('!Macro', {
-    kind: 'mapping',
-    construct: (data) => ({'Fn::Macro': data})
-})
-let yamlTypeMacroSeq = new jsYaml.Type('!Macro', {
-    kind: 'sequence',
-    construct: (data) => ({'Fn::Macro': data})
-})
-let yamlTypeFuncSeq = new jsYaml.Type('!Function', {
-    kind: 'sequence',
-    construct: (data) => ({'Fn::Function': data})
-})
-const inlineSchema = new jsYaml.Schema({
-    include:  [schema],
-    implicit: [],
-    explicit: [yamlTypeMacroMap, yamlTypeMacroSeq, yamlTypeFuncSeq],
-})
 
 /////////////////////////////////
 
@@ -155,8 +133,7 @@ function load(tPath, callback) {
       templateParameterValues: {}
     }
 
-    const fragment = jsYaml.safeLoad(readFileSync(tPath, 'utf8'),
-            {schema: inlineSchema})
+    const fragment = yamlParse(readFileSync(tPath, 'utf8'))
     let tParams = {}
     for (const [k, v] of Object.entries(fragment.Parameters || {})) {
       const val = process.env[k] || v.Default
@@ -190,8 +167,7 @@ function loadTest(tPath, cPath) {
       console.warn("FAILURE")
       process.exit(1)
     }
-    let expected = jsYaml.safeLoad(readFileSync(cPath, 'utf8'),
-            {schema: inlineSchema})
+    let expected = yamlParse(readFileSync(cPath, 'utf8'))
     let respFragment = Object.assign({}, resp.fragment)
     // Remove stuff we don't want to check/show
     delete respFragment.Metadata
@@ -224,8 +200,7 @@ switch (mode) {
   case 'load':
     load(process.argv[3], function(err, resp) {
         if (err)  { process.exit(1) }
-        console.warn(jsYaml.safeDump(resp.fragment,
-                    {schema: inlineSchema}))
+        console.warn(yamlDump(resp.fragment))
     })
     break
   case 'compare':
