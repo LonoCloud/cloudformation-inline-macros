@@ -80,7 +80,9 @@ evaluation/expansion phases that happen in the following order:
   functions are resolved during this phase.
 * Template Outputs are generated
 
-## Macro Definitions
+## Inline Macros
+
+### Defining inline macros
 
 Inline macros are defined in JSMacros and PyMacros sections of the
 template metadata. Here is an example of a trivial InlineJS macro
@@ -101,7 +103,7 @@ fragment value of the macro call will become the new value of the tree
 at the position where the macro is called.
 
 
-## Macro Calls
+### Calling inline macros
 
 A InlineJS/InlinePy macro call be made from any point in the Yaml tree
 under Resources or Outputs. A Macro call has the following structure:
@@ -128,6 +130,54 @@ sequentially at the same point in the tree:
       Param1: "Param1 Value"
       Param2: "Param2 Value"
 ```
+
+## Inline Functions
+
+### Defining inline functions
+
+Functions are defined in within the `Metadata` section in `JSInit` and
+`PyInit` (respectively for InlineJS and InlinePy). To make functions
+in `JSInit` available they must be added to the global `exports`
+variable (similar to how Node.js modules do function exports). Any
+top-level functions declared in `PyInit` are available to be called
+(similar to python modules).
+
+### Calling inline functions
+
+Like macro calls, function calls can be made from any point in the
+Yaml tree under Resources or Outputs. The result of the function call
+is substituted into the tree at the call point. A function call has
+the following structure:
+
+```yaml
+'Fn::Function': [FName, "FArg1", "FArg2"]
+```
+
+In the above call, the function named `Name` is called with
+arguments "FArg1" and "Farg2". In other words, it is equivalent to
+`FName("FArg1", "FArg2")`.
+
+## Differences between inline macros and functions
+
+* Macro calls are evaluated breadth first (outside in until there are
+  no more macro calls). After all macros are evaluated then functions
+  are evaluated depth first (inside out). Function calls can make use
+  of the result of other function calls.
+* Each macro is defined separately as a unique attribute under
+  `JSMacros` or `PyMacros` sections in the `Metadata` section.
+  Function definitions happen in the single `JSInit` or `PyInit`
+  section under `Metadata`.
+* Macro definitions have implicit parameters `event` and `context`.
+  Functions definitions are defined as normal JavaScript or Python
+  functions with user defined parameters. Functions also have implicit
+  access to the event and context variables (most frequently so that
+  functions have access to global template parameters).
+* Macro calls are passed a map that contains `Name` and optionally
+  `Parameters` (which becomes the `params` attribute of event).
+  Function calls take a sequence of the function name (as a string)
+  followed by positional parameters (only positional parameters are
+  supported in Python functions).
+
 
 
 

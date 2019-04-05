@@ -245,15 +245,9 @@ Outputs:
 ## Example 4: Inline Functions
 
 In addition to user defined inline macros, Inline\* also supports user
-defined inline functions. Functions are defined in within the
-`Metadata` section in `JSInit` and `PyInit` (respectively for InlineJS
-and InlinePy). To make functions in `JSInit` available they must be
-added to the global `exports` variable (similar to how Node.js modules
-do function exports). Any top-level functions declared in `PyInit` are
-available to be called (similar to python modules).
-
-Here is a template that show `Add` and `Mult` functions that enable
-addition and multiplication to be used within a template:
+defined inline functions. Here is a template that show `Add` and
+`Mult` functions that enable addition and multiplication to be used
+within a template:
 
 ```yaml
 Metadata:
@@ -264,8 +258,12 @@ Metadata:
 
 Outputs:
   Output:
-    Value: !Function [Add, 5, !Function [Mult, 6, 7] ]
+    Value: {'Fn::Function': [Add, 5, {'Fn::Function': [Mult, 6, 7]} ]}
 ```
+
+All function defintions are defined within a single `JSInit` (or
+`PyInit`) section which is written in much the same way as JavaScript
+and/or Python modules.
 
 The result of evaluating this template is:
 
@@ -277,23 +275,11 @@ Outputs:
     Value: 47
 ```
 
-Differences between macros and functions
-* Macro calls are evaluated breadth first (outside in until there are
-  no more macro calls). After all macros are evaluated then functions
-  are evaluated depth first (inside out). Function calls can make use
-  of the result of other function calls.
-* Each macro is defined separately as a unique attribute under
-  `JSMacros` or `PyMacros` sections in the `Metadata` section.
-  Function definitions happen in the single `JSInit` or `PyInit`
-  section under `Metadata`.
-* Macro definitions have implicit parameters `event` and `context`.
-  Functions definitions are defined as normal JavaScript or Python
-  functions with user defined parameters.
-* Macro calls are passed a map that contains `Name` and optionally
-  `Parameters` (which becomes the `params` attribute of event).
-  Function calls take a sequence of the function name (as a string)
-  followed by positional parameters (only positional parameters are
-  supported in Python functions).
+Due to the depth first (inside out) nature of function calls
+(as opposed to macro calls), the `Mult` function call was evaluated
+first and resulting value was passed to the `Add` function call. Also,
+unlike macro calls, function calls are specified with the function
+name string followed by a sequence of position parameters.
 
 
 ...
