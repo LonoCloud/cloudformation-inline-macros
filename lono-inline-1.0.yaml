@@ -36,7 +36,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Handler: index.handler
-      Runtime: nodejs8.10
+      Runtime: nodejs10.x
       Role: !GetAtt MacroExecutionRole.Arn
       Code:
         ZipFile: |
