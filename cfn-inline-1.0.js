@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+
+// Copyright (c) 2021, Viasat, Inc
+// License under MPL 2.0
+
 'use strict'
 
 //// vvv snip from here vvv ////

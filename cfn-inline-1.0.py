@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# Copyright (c) 2021, Viasat, Inc
+# License under MPL 2.0
+
 # Import the mostly common modules
 # This line should match import in snippit
 import copy, functools, importlib, json, math, os, re, string, sys, time, traceback, types

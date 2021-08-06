@@ -3,7 +3,7 @@
 ## Description
 
 The cfn-inline-1.0.yaml template defines a "meta" macro system that
-allows cloudformation macros to be define within the same template in
+allows cloudformation macros to be defined within the same template in
 which they are used. This is done by defining macros in the Metadata
 section which can then be called with 'Fn::Macro' definitions within
 the template.
@@ -189,4 +189,11 @@ Unit tests for the Inline\* macros can be executed like this:
 ./cfn-inline-1.0.js test
 ./cfn-inline-1.0.py test
 ```
+
+## Copyright & License
+
+This software is copyright Viasat and subject to the terms of the
+Mozilla Public License version 2.0 (MPL.20). A copy of the license is
+located at in the LICENSE file at the top of the repository or
+available at https://mozilla.org/MPL/2.0/.
 

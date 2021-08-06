@@ -1,5 +1,8 @@
 AWSTemplateFormatVersion: 2010-09-09
 
+# Copyright (c) 2021, Viasat, Inc
+# License under MPL 2.0
+
 #
 # This template defines the InlineJS and InlinePy cloudformation
 # macros that allows macro and function definitions to be declared and
