@@ -22,7 +22,7 @@ Resources:
   MacroLogPolicy:
     Type: AWS::IAM::Policy
     Properties:
-      PolicyName: !Sub "LogPolicy-Lono-Inline"
+      PolicyName: !Sub "LogPolicy-Inline-Macros"
       PolicyDocument:
         Version: 2012-10-17
         Statement:

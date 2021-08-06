@@ -1,7 +1,7 @@
 {
-    "name": "lono-macros",
+    "name": "cloudformation-inline-macros",
     "version": "1.0",
-    "description": "LonoCloud Cloudformation Macros",
+    "description": "Cloudformation Inline Macros (Python and JavaScript)",
     "dependencies": {
         "yaml-cfn": "0.2.0"
     }

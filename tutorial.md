@@ -1,4 +1,4 @@
-# Lono InlineJS/InlinePy Tutorial
+# Cloudformation InlineJS/InlinePy Macros Tutorial
 
 This tutorial describes how to write macros starting from some very
 simple macros and moving to more complex macros. The full Yaml
@@ -88,7 +88,7 @@ We can use command line testing tool to see what will happen
 when the InlineJS macros are run/resolved:
 
 ```yaml
-$ ./lono-inline-1.0.js load examples/e1-trivial-js.yaml
+$ ./cfn-inline-1.0.js load examples/e1-trivial-js.yaml
 { region: 'us-west-2',
   accountId: 'some-account-id',
   transformId: 'some-tx-id',
@@ -152,7 +152,7 @@ Here is the Outputs section that results from evaluating the above
 template:
 
 ```yaml
-$ ./lono-inline-1.0.js load examples/e3-loop-js.yaml
+$ ./cfn-inline-1.0.js load examples/e3-loop-js.yaml
 ...
 Outputs:
   MyOutput1:
@@ -222,7 +222,7 @@ Here is the result of evaluating the template with the `CondParam`
 parameter enabled (set to "yes"):
 
 ```yaml
-$ CondParam=yes ./lono-inline-1.0.js load examples/e4-conditional-js.yaml
+$ CondParam=yes ./cfn-inline-1.0.js load examples/e4-conditional-js.yaml
 ...
 Outputs:
   FixedOutput:
@@ -235,7 +235,7 @@ Here is the result of evaluating the template with the `CondParam`
 parameter disabled (set to "no"):
 
 ```yaml
-$ CondParam=no ./lono-inline-1.0.js load examples/e4-conditional-js.yaml
+$ CondParam=no ./cfn-inline-1.0.js load examples/e4-conditional-js.yaml
 ...
 Outputs:
   FixedOutput:
@@ -268,7 +268,7 @@ and/or Python modules.
 The result of evaluating this template is:
 
 ```yaml
-$ ./lono-inline-1.0.js load examples/e5-functions-js.yaml
+$ ./cfn-inline-1.0.js load examples/e5-functions-js.yaml
 ...
 Outputs:
   Output:
@@ -415,7 +415,7 @@ in InlinePy).
 Here is the result of evaluating the above template:
 
 ```yaml
-$ ./lono-inline-1.0.js load examples/e7-merge-class-js.yaml
+$ ./cfn-inline-1.0.js load examples/e7-merge-class-js.yaml
 ...
 Resources:
   SSM1:

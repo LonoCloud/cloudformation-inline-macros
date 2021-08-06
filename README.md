@@ -2,16 +2,16 @@
 
 ## Description
 
-The lono-inline-1.0.yaml template defines a "meta" macro system that
+The cfn-inline-1.0.yaml template defines a "meta" macro system that
 allows cloudformation macros to be define within the same template in
 which they are used. This is done by defining macros in the Metadata
 section which can then be called with 'Fn::Macro' definitions within
 the template.
 
-The lono-inline-1.0.yaml template contains defintions for both the
+The cfn-inline-1.0.yaml template contains defintions for both the
 JavaScript and Python versions of the macro. Copies of the JavaScript
-and Python code respectively are contained in lono-inline-1.0.js and
-lono-inline-1.0.py. The code in the yaml and js/py files should be
+and Python code respectively are contained in cfn-inline-1.0.js and
+cfn-inline-1.0.py. The code in the yaml and js/py files should be
 kept in sync.
 
 The [tutorial](tutorial.md) describes how to write macros starting
@@ -40,14 +40,14 @@ malicious attacks.
 
 ## Command line usage
 
-The lono-inline-1.0.\* scripts have wrapper
+The cfn-inline-1.0.\* scripts have wrapper
 code that present a command line interface for being able to test the
 evaluation of macro code on a template. For example, this will show
 the result of using the Inline* macro on a template file:
 
 ```
-./lono-inline-1.0.js load ./tests/t1.yaml
-./lono-inline-1.0.py load ./tests/t1.yaml
+./cfn-inline-1.0.js load ./tests/t1.yaml
+./cfn-inline-1.0.py load ./tests/t1.yaml
 ```
 
 ## CloudFormation Evaluation Process
@@ -186,7 +186,7 @@ arguments "FArg1" and "Farg2". In other words, it is equivalent to
 Unit tests for the Inline\* macros can be executed like this:
 
 ```
-./lono-inline-1.0.js test
-./lono-inline-1.0.py test
+./cfn-inline-1.0.js test
+./cfn-inline-1.0.py test
 ```
 
